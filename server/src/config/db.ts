@@ -8,6 +8,11 @@ export const connectDB = async (): Promise<void> => {
     const conn = await mongoose.connect(env.MONGO_URI);
     console.log(`✅ MongoDB connected: ${conn.connection.host}`);
   } catch (error) {
+    if (env.NODE_ENV === 'production') {
+      console.error('❌ MongoDB connection failed in production mode:', error);
+      process.exit(1);
+    }
+
     console.log('⚠️  MongoDB connection failed. Starting fallback in-memory MongoDB...');
     try {
       const { MongoMemoryServer } = await import('mongodb-memory-server');
