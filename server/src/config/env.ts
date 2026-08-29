@@ -3,6 +3,11 @@ import { z } from 'zod';
 
 dotenv.config();
 
+// Fallback in case Render environment uses MONGO_URL instead of MONGO_URI
+if (!process.env.MONGO_URI && process.env.MONGO_URL) {
+  process.env.MONGO_URI = process.env.MONGO_URL;
+}
+
 const envSchema = z.object({
   MONGO_URI: z.string().min(1, 'MONGO_URI is required'),
   JWT_SECRET: z.string().min(16, 'JWT_SECRET must be at least 16 characters'),
