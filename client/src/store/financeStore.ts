@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { format, startOfMonth, endOfMonth, subMonths } from 'date-fns';
+import { format, startOfMonth } from 'date-fns';
+
 
 export type PeriodType = 'day' | 'week' | 'month' | 'year' | 'custom';
 
@@ -73,7 +74,8 @@ function getDefaultRange(type: PeriodType): DateRange {
 
 export const useFinanceStore = create<FinanceState>()(
   persist(
-    (set, get) => ({
+    (set) => ({
+
       periodType: 'month',
       dateRange: getDefaultRange('month'),
       filter: { page: 1 },

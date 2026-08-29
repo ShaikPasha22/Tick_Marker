@@ -1,13 +1,15 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Link, useNavigate } from 'react-router-dom';
-import { Map, Plus, MapPin, Calendar, Users, ChevronRight } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+
+import { Map, Plus, MapPin, Calendar, ChevronRight } from 'lucide-react';
+
 import { motion } from 'framer-motion';
 import { format } from 'date-fns';
 import { tripApi } from '../../../api/trip';
 import FinanceSubNav from '../../../components/finance/FinanceSubNav';
 import AddTripModal from '../../../components/finance/trips/AddTripModal';
-import type { Trip } from '../../../types';
+
 
 export default function TripListPage() {
   const navigate = useNavigate();

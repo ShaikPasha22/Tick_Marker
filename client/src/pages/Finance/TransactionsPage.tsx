@@ -51,18 +51,16 @@ export default function TransactionsPage() {
     limit: LIMIT,
   };
 
-  const { data: expenseData, isLoading: expLoading } = useQuery({
+  const { data: expenseData, isLoading: expLoading } = useQuery<{ expenses: Expense[]; total: number; pages: number }>({
     queryKey: ['finance-transactions', 'expenses', expenseParams],
     queryFn: () => expensesApi.getAll(expenseParams),
     enabled: mode !== 'income',
-    keepPreviousData: true,
   } as any);
 
-  const { data: incomeData, isLoading: incLoading } = useQuery({
+  const { data: incomeData, isLoading: incLoading } = useQuery<{ incomes: Income[]; total: number; pages: number }>({
     queryKey: ['finance-transactions', 'income', incomeParams],
     queryFn: () => incomeApi.getAll(incomeParams),
     enabled: mode !== 'expenses',
-    keepPreviousData: true,
   } as any);
 
   const { data: categories = [] } = useQuery({

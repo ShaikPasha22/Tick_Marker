@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams, Link } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
+
 import { 
-  ArrowLeft, Plus, MapPin, Calendar as CalendarIcon, 
-  TrendingDown, Check, Activity, Wallet, PieChart, Users
+  ArrowLeft, Plus, MapPin, Calendar as CalendarIcon,
+  Wallet, PieChart, Users
 } from 'lucide-react';
+
 import { format } from 'date-fns';
 import { tripApi } from '../../../api/trip';
 import AddTripExpenseModal from '../../../components/finance/trips/AddTripExpenseModal';
@@ -14,7 +16,7 @@ import { useTripExpenses } from '../../../hooks/useTripExpenses';
 import type { TripExpense } from '../../../types';
 import toast from 'react-hot-toast';
 
-function MetricCard({ label, value, sub, color }: { label: string; value: string; sub?: string; color: string }) {
+function MetricCard({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
     <div className="card p-5 flex flex-col gap-1 shadow-sm">
       <p className="text-sm font-medium text-surface-600 dark:text-surface-400">{label}</p>
@@ -23,6 +25,7 @@ function MetricCard({ label, value, sub, color }: { label: string; value: string
     </div>
   );
 }
+
 
 export default function TripDashboardPage() {
   const { tripId } = useParams<{ tripId: string }>();
@@ -205,7 +208,7 @@ export default function TripDashboardPage() {
                   className="input h-9 text-xs px-2"
                 />
                 {dateFilter && <button className="text-xs font-semibold text-red-500 hover:underline" onClick={() => setDateFilter('')}>Clear</button>}
-                <span className="text-sm text-surface-500 ml-2">{summary.transactionCount} expenses</span>
+                <span className="text-sm text-surface-500 ml-2">{(summary as any).transactionCount ?? expenses?.length ?? 0} expenses</span>
               </div>
             </div>
 
