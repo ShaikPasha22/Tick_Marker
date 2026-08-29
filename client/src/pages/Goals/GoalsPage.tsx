@@ -4,8 +4,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useForm } from 'react-hook-form';
 import { Plus, Target, Trash2, X, Calendar, Edit2 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { format, startOfMonth, endOfMonth, getDaysInMonth, getDay, addMonths, subMonths, isToday, startOfWeek, addDays, parseISO } from 'date-fns';
-import { ChevronLeft, ChevronRight, Flame, CheckCircle, Percent, Clock } from 'lucide-react';
+import { format, startOfMonth, endOfMonth, getDaysInMonth, getDay, addMonths, subMonths, isToday, startOfWeek, addDays } from 'date-fns';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 import { goalsApi } from '../../api/goals';
 import { habitsApi } from '../../api/habits';

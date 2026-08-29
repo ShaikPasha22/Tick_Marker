@@ -4,12 +4,10 @@ import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDay, isToday, a
 import { ChevronLeft, ChevronRight, Target } from 'lucide-react';
 import { completionsApi } from '../../api/completions';
 import { goalsApi } from '../../api/goals';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import type { Habit } from '../../types';
 
 export default function MonthCalendar({ habits }: { habits: Habit[] }) {
-  const queryClient = useQueryClient();
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDay, setSelectedDay] = useState<Date>(new Date());
   
