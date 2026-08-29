@@ -1,16 +1,16 @@
-import { useState, useCallback } from 'react';
+import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, Filter, X, Plus, Download, TrendingDown, TrendingUp, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, Filter, X, Plus, Download, ChevronLeft, ChevronRight } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { format } from 'date-fns';
+
 import { expensesApi, incomeApi, expenseCategoriesApi, financeExportApi } from '../../api/finance';
-import { useCurrency, useFinanceStore } from '../../store/financeStore';
+import { useCurrency } from '../../store/financeStore';
 import FinanceSubNav from '../../components/finance/FinanceSubNav';
 import TransactionCard from '../../components/finance/TransactionCard';
 import AddExpenseModal from '../../components/finance/AddExpenseModal';
 import AddIncomeModal from '../../components/finance/AddIncomeModal';
-import type { Expense, Income, ExpenseCategory } from '../../types';
+import type { Expense, Income } from '../../types';
 
 type ViewMode = 'all' | 'expenses' | 'income';
 

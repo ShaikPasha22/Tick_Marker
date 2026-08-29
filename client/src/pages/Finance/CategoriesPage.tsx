@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, Archive, Edit3, X, Save, Tag } from 'lucide-react';
+import { Plus, Archive, Edit3, Save, Tag } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { expenseCategoriesApi } from '../../api/finance';
 import FinanceSubNav from '../../components/finance/FinanceSubNav';
@@ -239,7 +239,7 @@ export default function CategoriesPage() {
           <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
             <CategoryForm
               initial={{ type: typeFilter }}
-              onSave={(data) => createMutation.mutateAsync(data as any)}
+              onSave={(data) => createMutation.mutateAsync(data as any).then(() => {}) as Promise<void>}
               onCancel={() => setShowForm(false)}
               isLoading={createMutation.isPending}
             />
@@ -261,7 +261,7 @@ export default function CategoriesPage() {
                   <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
                     <CategoryForm
                       initial={cat}
-                      onSave={(data) => updateMutation.mutateAsync({ id: cat._id, data })}
+                      onSave={(data) => updateMutation.mutateAsync({ id: cat._id, data }).then(() => {}) as Promise<void>}
                       onCancel={() => setEditCat(null)}
                       isLoading={updateMutation.isPending}
                     />

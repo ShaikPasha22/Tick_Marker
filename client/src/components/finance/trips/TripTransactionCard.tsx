@@ -34,18 +34,18 @@ export default function TripTransactionCard({ expense, onEdit, onDelete, currenc
         : 'bg-indigo-50/50 dark:bg-indigo-900/10 border-indigo-100 dark:border-indigo-800 border-l-4 border-l-indigo-400'
     }`}>
       {/* Category Icon */}
-      <div 
+      <div
         className="w-10 h-10 rounded-full flex items-center justify-center shrink-0 shadow-sm"
-        style={{ backgroundColor: `${expense.categoryId?.color || '#94a3b8'}20` }}
+        style={{ backgroundColor: `${typeof expense.categoryId === 'object' ? expense.categoryId.color : '#94a3b8'}20` }}
       >
-        <span className="text-lg">{expense.categoryId?.icon || '📝'}</span>
+        <span className="text-lg">{typeof expense.categoryId === 'object' ? expense.categoryId.icon : '📝'}</span>
       </div>
 
       {/* Details */}
       <div className="flex-1 min-w-0">
         <div className="flex items-start justify-between">
           <p className="font-semibold text-surface-900 dark:text-surface-50 truncate text-sm">
-            {expense.categoryId?.name || 'Unknown Category'}
+            {typeof expense.categoryId === 'object' ? expense.categoryId.name : 'Unknown Category'}
           </p>
           <p className="font-bold text-surface-900 dark:text-surface-50 shrink-0 text-sm">
             {currency} {expense.amount.toLocaleString('en-IN')}

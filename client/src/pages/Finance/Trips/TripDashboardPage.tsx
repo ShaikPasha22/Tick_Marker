@@ -205,7 +205,7 @@ export default function TripDashboardPage() {
                   className="input h-9 text-xs px-2"
                 />
                 {dateFilter && <button className="text-xs font-semibold text-red-500 hover:underline" onClick={() => setDateFilter('')}>Clear</button>}
-                <span className="text-sm text-surface-500 ml-2">{(summary as any).transactionCount ?? groupedExpenses?.flatMap(g => g.expenses ?? g).length ?? 0} expenses</span>
+                <span className="text-sm text-surface-500 ml-2">{(summary as any).transactionCount ?? groupedExpenses?.length ?? 0} expenses</span>
               </div>
             </div>
 

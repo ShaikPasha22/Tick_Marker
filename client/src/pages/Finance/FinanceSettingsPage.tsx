@@ -1,15 +1,14 @@
 import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
-import { Save, Settings2, CreditCard, Wallet, Plus, X } from 'lucide-react';
+import { Save, Settings2, CreditCard, Plus, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { financeSettingsApi, paymentMethodsApi } from '../../api/finance';
 import { useCurrency, useFinanceStore } from '../../store/financeStore';
 import FinanceSubNav from '../../components/finance/FinanceSubNav';
-import type { PaymentMethod } from '../../types';
 
 export default function FinanceSettingsPage() {
-  const { fmt, symbol } = useCurrency();
+  useCurrency();
   const setCurrencySymbol = useFinanceStore((s) => s.setCurrencySymbol);
   const queryClient = useQueryClient();
 

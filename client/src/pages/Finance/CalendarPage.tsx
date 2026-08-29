@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
-import { format, getDaysInMonth, startOfMonth, getDay, addMonths, subMonths, isSameDay } from 'date-fns';
+import { format, getDaysInMonth, startOfMonth, getDay, addMonths, subMonths } from 'date-fns';
 import { ChevronLeft, ChevronRight, X, Plus, TrendingDown, TrendingUp } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { financeCalendarApi, expensesApi, incomeApi } from '../../api/finance';
@@ -9,7 +9,7 @@ import { useCurrency } from '../../store/financeStore';
 import FinanceSubNav from '../../components/finance/FinanceSubNav';
 import TransactionCard from '../../components/finance/TransactionCard';
 import AddExpenseModal from '../../components/finance/AddExpenseModal';
-import type { CalendarDay, Expense, Income } from '../../types';
+import type { CalendarDay } from '../../types';
 
 const WEEKDAY_HEADERS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
@@ -95,7 +95,7 @@ export default function CalendarPage() {
 
   const { data: dayIncomes } = useQuery({
     queryKey: ['finance-transactions', 'income', selectedDate],
-    queryFn: () => incomeApi.getAll({ from: selectedDate!, to: selectedDate!, limit: 50 }),
+    queryFn: () => incomeApi.getAll({ from: selectedDate!, to: selectedDate! }),
     enabled: !!selectedDate,
   });
 

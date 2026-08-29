@@ -33,7 +33,7 @@ export default function VoiceAssistantModal() {
   }, [state, transcript]);
   
   const inputRef = useRef<HTMLInputElement>(null);
-  const speechTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const speechTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const getContext = () => {
     const route = location.pathname;
@@ -142,7 +142,7 @@ export default function VoiceAssistantModal() {
           }
         }, 2500);
       },
-      (err) => {
+      (_err) => {
         setState('ERROR');
         setMessage('Could not understand speech. Please try again.');
       },

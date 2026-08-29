@@ -1,13 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { PiggyBank, Save, ChevronDown, ChevronUp, AlertCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { budgetApi, expenseCategoriesApi } from '../../api/finance';
 import { useCurrency } from '../../store/financeStore';
 import FinanceSubNav from '../../components/finance/FinanceSubNav';
 import BudgetProgressBar from '../../components/finance/BudgetProgressBar';
-import type { ExpenseCategory } from '../../types';
 
 export default function BudgetPage() {
   const { fmt } = useCurrency();

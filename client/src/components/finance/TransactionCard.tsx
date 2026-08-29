@@ -3,7 +3,6 @@ import { format } from 'date-fns';
 import { Trash2, ArrowUpRight, ArrowDownRight, RotateCcw } from 'lucide-react';
 import type { Expense, Income, ExpenseCategory, PaymentMethod } from '../../types';
 import { useCurrency } from '../../store/financeStore';
-import CategoryBadge from './CategoryBadge';
 
 type TransactionType = 'expense' | 'income';
 

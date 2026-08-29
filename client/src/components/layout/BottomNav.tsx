@@ -1,5 +1,5 @@
 import { NavLink, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, CheckSquare, BarChart3, BookOpen, Plus, Wallet } from 'lucide-react';
+import { LayoutDashboard, CheckSquare, BookOpen, Plus, Wallet } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 const navItems = [

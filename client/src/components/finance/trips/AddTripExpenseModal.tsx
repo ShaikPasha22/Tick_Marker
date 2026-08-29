@@ -1,9 +1,9 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { X, DollarSign, Calendar, AlignLeft, Tag, Users, Wallet, Plus, Globe } from 'lucide-react';
+import { X, Calendar, AlignLeft, Tag, Users, Globe } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { tripApi } from '../../../api/trip';
-import type { TripExpense, Trip, TripParticipant } from '../../../types';
+import type { TripExpense } from '../../../types';
 import toast from 'react-hot-toast';
 
 interface AddTripExpenseModalProps {

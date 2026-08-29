@@ -4,10 +4,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { format, startOfMonth } from 'date-fns';
 import {
   Wallet, TrendingUp, TrendingDown, PiggyBank, BarChart2,
-  Plus, Minus, AlertCircle, Zap, ArrowRight, RefreshCw
+  Plus, Minus, AlertCircle, Zap
 } from 'lucide-react';
 import {
-  AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer
+  AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer
 } from 'recharts';
 import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
@@ -18,7 +18,7 @@ import AddIncomeModal from '../../components/finance/AddIncomeModal';
 import TransactionCard from '../../components/finance/TransactionCard';
 import BudgetProgressBar from '../../components/finance/BudgetProgressBar';
 import FinanceSubNav from '../../components/finance/FinanceSubNav';
-import type { Expense, Income, FinancialInsight } from '../../types';
+import type { FinancialInsight } from '../../types';
 
 function MetricCard({
   label, value, sub, icon: Icon, iconColor, bgColor, trend, highlight
@@ -98,7 +98,7 @@ export default function FinanceDashboardPage() {
   const from = format(startOfMonth(now), 'yyyy-MM-dd');
   const to = format(now, 'yyyy-MM-dd');
 
-  const { data, isLoading, refetch } = useQuery({
+  const { data, isLoading } = useQuery({
     queryKey: ['finance-dashboard', from, to],
     queryFn: () => financeDashboardApi.get({ from, to }),
     staleTime: 60 * 1000,
@@ -134,7 +134,7 @@ export default function FinanceDashboardPage() {
 
   if (!data) return null;
 
-  const { summary, balance, budgetStatus, categoryBreakdown, dailySpending, recentTransactions, insights, velocity, averageDailySpending, topCategory, currencySymbol } = data;
+  const { summary, balance, budgetStatus, categoryBreakdown, dailySpending, recentTransactions, insights, velocity, averageDailySpending, topCategory } = data;
 
   // Spending velocity bar
   const velocityPct = velocity?.percentBudgetUsed ?? 0;

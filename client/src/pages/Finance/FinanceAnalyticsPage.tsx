@@ -1,24 +1,21 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { format, startOfMonth, endOfMonth, subMonths, startOfYear, subDays } from 'date-fns';
+import { format, startOfMonth, subMonths, startOfYear, subDays } from 'date-fns';
 import {
-  BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, AreaChart, Area,
+  BarChart, Bar, PieChart, Pie, Cell, AreaChart, Area,
   XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, CartesianGrid,
 } from 'recharts';
 import { motion } from 'framer-motion';
-import { TrendingUp, TrendingDown, BarChart2, Calendar } from 'lucide-react';
-import {
-  financeAnalyticsApi, expenseCategoriesApi,
-} from '../../api/finance';
+import { TrendingUp, TrendingDown, BarChart2 } from 'lucide-react';
+import { financeAnalyticsApi } from '../../api/finance';
 import { useCurrency } from '../../store/financeStore';
 import FinanceSubNav from '../../components/finance/FinanceSubNav';
-import type { CategoryBreakdownItem } from '../../types';
 
 type Period = 'week' | 'month' | '3months' | 'year' | 'custom';
 
 const CHART_COLORS = ['#6366f1', '#10b981', '#f97316', '#ef4444', '#f59e0b', '#8b5cf6', '#06b6d4', '#ec4899', '#84cc16', '#71717a'];
 
-const CustomTooltip = ({ active, payload, label, symbol, valueKey }: any) => {
+const CustomTooltip = ({ active, payload, label, symbol, valueKey: _valueKey }: any) => {
   if (!active || !payload?.length) return null;
   return (
     <div className="bg-white dark:bg-surface-800 border border-custom rounded-xl shadow-lg p-3 text-xs min-w-[120px]">
