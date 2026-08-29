@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useQueryClient, useMutation, useQuery } from '@tanstack/react-query';
-import { useForm, Controller } from 'react-hook-form';
+import { useForm } from 'react-hook-form';
 import { X, AlertTriangle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
@@ -27,7 +27,7 @@ interface AddExpenseModalProps {
 }
 
 export default function AddExpenseModal({ onClose, expense, prefilledDate }: AddExpenseModalProps) {
-  const { fmt } = useCurrency();
+  useCurrency();
   const queryClient = useQueryClient();
   const [unusualWarning, setUnusualWarning] = useState<string | null>(null);
 
@@ -46,7 +46,6 @@ export default function AddExpenseModal({ onClose, expense, prefilledDate }: Add
   const {
     register,
     handleSubmit,
-    control,
     watch,
     setValue,
     formState: { isSubmitting, errors },
@@ -80,8 +79,8 @@ export default function AddExpenseModal({ onClose, expense, prefilledDate }: Add
   }, [paymentMethods, expense, setValue]);
 
   const { mutateAsync } = useMutation({
-    mutationFn: (data: any) =>
-      expense ? expensesApi.update(expense._id, data) : expensesApi.create(data),
+    mutationFn: (data: any): Promise<{ expense: Expense; unusualWarning: any }> =>
+      (expense ? expensesApi.update(expense._id, data) : expensesApi.create(data)) as Promise<{ expense: Expense; unusualWarning: any }>,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['finance'] });
       queryClient.invalidateQueries({ queryKey: ['finance-dashboard'] });
