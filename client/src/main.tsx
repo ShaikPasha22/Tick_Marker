@@ -10,11 +10,12 @@ const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       retry: 1,
-      staleTime: 1000 * 60 * 2, // 2 minutes
-      refetchOnWindowFocus: true,
+      staleTime: 1000 * 60 * 5, // 5 minutes
+      refetchOnWindowFocus: false, // Prevent refetch every time window regains focus
     },
   },
 });
+
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

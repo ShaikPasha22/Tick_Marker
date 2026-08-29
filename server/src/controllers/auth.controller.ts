@@ -25,7 +25,8 @@ export const register = async (req: Request, res: Response, next: NextFunction):
 
     await user.save();
 
-    const token = generateToken(user._id.toString());
+    const token = generateToken(user._id.toString(), user.timezone);
+
 
     res.status(201).json({
       token,
@@ -61,7 +62,8 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
       throw createError('Invalid email or password', 401);
     }
 
-    const token = generateToken(user._id.toString());
+    const token = generateToken(user._id.toString(), user.timezone);
+
 
     res.json({
       token,
@@ -184,7 +186,8 @@ export const resetPassword = async (req: Request, res: Response, next: NextFunct
     user.resetPasswordExpires = undefined;
     await user.save();
 
-    const authToken = generateToken(user._id.toString());
+    const authToken = generateToken(user._id.toString(), user.timezone);
+
     res.json({ message: 'Password reset successful', token: authToken });
   } catch (error) {
     next(error);

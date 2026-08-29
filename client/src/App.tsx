@@ -5,6 +5,7 @@ import { useUIStore } from './store/uiStore';
 import AppShell from './components/layout/AppShell';
 import LoadingScreen from './components/ui/LoadingScreen';
 
+
 // Lazy-loaded pages
 const LoginPage = lazy(() => import('./pages/Auth/LoginPage'));
 const RegisterPage = lazy(() => import('./pages/Auth/RegisterPage'));
@@ -33,15 +34,18 @@ const TripDashboardPage = lazy(() => import('./pages/Finance/Trips/TripDashboard
 const TripTransactionsPage = lazy(() => import('./pages/Finance/Trips/TripTransactionsPage'));
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { user, token, isLoading } = useAuthStore();
-  if (isLoading) return <LoadingScreen />;
+  const { user, token, isLoading, _hasHydrated } = useAuthStore();
+  // Wait for Zustand to rehydrate from localStorage before making routing decisions
+  if (!_hasHydrated || isLoading) return <LoadingScreen />;
   if (!token || !user) return <Navigate to="/login" replace />;
   if (!user.onboardingCompleted) return <Navigate to="/onboarding" replace />;
   return <>{children}</>;
 }
 
 function AuthRoute({ children }: { children: React.ReactNode }) {
-  const { user, token } = useAuthStore();
+  const { user, token, _hasHydrated } = useAuthStore();
+  // Don't redirect until hydration is done — token/user may not be loaded yet
+  if (!_hasHydrated) return <LoadingScreen />;
   if (token && user) {
     return <Navigate to={user.onboardingCompleted ? '/dashboard' : '/onboarding'} replace />;
   }
@@ -49,18 +53,18 @@ function AuthRoute({ children }: { children: React.ReactNode }) {
 }
 
 function OnboardingGuard({ children }: { children: React.ReactNode }) {
-  const { token } = useAuthStore();
+  const { token, _hasHydrated } = useAuthStore();
+  if (!_hasHydrated) return <LoadingScreen />;
   if (!token) return <Navigate to="/login" replace />;
   return <>{children}</>;
 }
 
 function App() {
-  const { loadUser, isLoading } = useAuthStore();
+  const { loadUser, _hasHydrated } = useAuthStore();
   const { applyTheme } = useUIStore();
 
   useEffect(() => {
     applyTheme();
-    loadUser();
 
     // Listen for system theme changes
     const mq = window.matchMedia('(prefers-color-scheme: dark)');
@@ -69,7 +73,16 @@ function App() {
     return () => mq.removeEventListener('change', handler);
   }, []);
 
-  if (isLoading) return <LoadingScreen />;
+  // Trigger loadUser once Zustand has finished reading from localStorage.
+  // If user data is already persisted, this is nearly instant.
+  useEffect(() => {
+    if (_hasHydrated) {
+      loadUser();
+    }
+  }, [_hasHydrated]);
+
+  // Each route guard handles the loading state individually — no full-screen
+  // spinner needed here. Individual guards show LoadingScreen until hydrated.
 
   return (
     <Suspense fallback={<LoadingScreen />}>

@@ -1,7 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { env } from '../config/env';
-import { User } from '../models/User';
 
 export interface AuthRequest extends Request {
   userId?: string;
@@ -23,30 +22,26 @@ export const authenticate = async (
 
     const token = authHeader.split(' ')[1];
 
-    let decoded: { userId: string };
+    let decoded: { userId: string; timezone?: string };
     try {
-      decoded = jwt.verify(token, env.JWT_SECRET) as { userId: string };
+      decoded = jwt.verify(token, env.JWT_SECRET) as { userId: string; timezone?: string };
     } catch {
       res.status(401).json({ message: 'Invalid or expired token' });
       return;
     }
 
-    const user = await User.findById(decoded.userId).select('_id timezone').lean();
-    if (!user) {
-      res.status(401).json({ message: 'User not found' });
-      return;
-    }
-
+    // Timezone is embedded in the JWT — no DB lookup needed per request.
+    // This eliminates a DB round-trip on every authenticated API call.
     req.userId = decoded.userId;
-    req.userTimezone = user.timezone;
+    req.userTimezone = decoded.timezone ?? 'UTC';
     next();
   } catch (error) {
     next(error);
   }
 };
 
-export const generateToken = (userId: string): string => {
-  return jwt.sign({ userId }, env.JWT_SECRET, {
+export const generateToken = (userId: string, timezone: string = 'UTC'): string => {
+  return jwt.sign({ userId, timezone }, env.JWT_SECRET, {
     expiresIn: env.JWT_EXPIRES_IN as jwt.SignOptions['expiresIn'],
   });
 };
