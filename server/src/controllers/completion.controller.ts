@@ -6,6 +6,8 @@ import { AuthRequest } from '../middleware/auth';
 import { createError } from '../middleware/errorHandler';
 import { toUTCMidnight } from '../services/scheduling.service';
 import { isHabitScheduledOn } from '../services/scheduling.service';
+import { GoalSyncService } from '../services/goalSync.service';
+
 
 // GET /api/completions
 export const getCompletions = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
@@ -35,6 +37,9 @@ import { HabitService } from '../services/habit.service';
 export const logCompletion = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
     const result = await HabitService.logCompletion(req.userId!, req.body);
+    if (result.habit.goalId) {
+      await GoalSyncService.syncGoalProgress(result.habit.goalId);
+    }
     res.status(201).json(result);
   } catch (error) {
     next(error);
@@ -58,6 +63,12 @@ export const updateCompletion = async (req: AuthRequest, res: Response, next: Ne
     );
 
     if (!completion) throw createError('Completion record not found', 404);
+
+    const habit = await Habit.findById(completion.habitId);
+    if (habit && habit.goalId) {
+      await GoalSyncService.syncGoalProgress(habit.goalId);
+    }
+
     res.json({ completion });
   } catch (error) {
     next(error);
@@ -72,6 +83,12 @@ export const deleteCompletion = async (req: AuthRequest, res: Response, next: Ne
       userId: req.userId,
     });
     if (!result) throw createError('Completion record not found', 404);
+
+    const habit = await Habit.findById(result.habitId);
+    if (habit && habit.goalId) {
+      await GoalSyncService.syncGoalProgress(habit.goalId);
+    }
+
     res.json({ message: 'Completion removed' });
   } catch (error) {
     next(error);

@@ -8,9 +8,20 @@ import { format } from 'date-fns';
 import { goalsApi } from '../../api/goals';
 import type { Goal } from '../../types';
 
-function GoalCard({ goal, onEdit, onDelete }: { goal: Goal; onEdit: () => void; onDelete: () => void }) {
+function GoalCard({
+  goal,
+  onEdit,
+  onDelete,
+  onProgressChange,
+}: {
+  goal: Goal;
+  onEdit: () => void;
+  onDelete: () => void;
+  onProgressChange: (val: number) => void;
+}) {
   const progress = goal.targetValue > 0 ? Math.min(100, Math.round((goal.currentValue / goal.targetValue) * 100)) : 0;
   const remaining = Math.max(0, goal.targetValue - goal.currentValue);
+
 
   const statusColors = {
     active: 'border-primary-200 dark:border-primary-800',
@@ -53,13 +64,35 @@ function GoalCard({ goal, onEdit, onDelete }: { goal: Goal; onEdit: () => void; 
         <p className="text-sm text-surface-500 mb-4">{goal.description}</p>
       )}
 
-      {/* Progress */}
-      <div className="space-y-2 mb-4">
+      {/* Progress & Quick Controls */}
+      <div className="space-y-3 mb-4">
         <div className="flex justify-between items-center">
-          <span className="text-2xl font-bold text-surface-900 dark:text-surface-50">
-            {goal.currentValue}
-            <span className="text-base font-normal text-surface-400"> / {goal.targetValue} {goal.unit}</span>
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="text-2xl font-bold text-surface-900 dark:text-surface-50">
+              {goal.currentValue}
+              <span className="text-base font-normal text-surface-400"> / {goal.targetValue} {goal.unit}</span>
+            </span>
+
+            {/* Quick progress update buttons */}
+            <div className="flex items-center gap-1.5 ml-2">
+              <button
+                type="button"
+                onClick={() => onProgressChange(Math.max(0, goal.currentValue - 1))}
+                className="w-7 h-7 rounded-lg border border-surface-200 dark:border-surface-700 flex items-center justify-center text-sm font-semibold text-surface-500 hover:bg-surface-50 dark:hover:bg-surface-800 transition-colors"
+                title="Decrease"
+              >
+                -
+              </button>
+              <button
+                type="button"
+                onClick={() => onProgressChange(Math.min(goal.targetValue, goal.currentValue + 1))}
+                className="w-7 h-7 rounded-lg border border-surface-200 dark:border-surface-700 flex items-center justify-center text-sm font-semibold text-surface-500 hover:bg-surface-50 dark:hover:bg-surface-800 transition-colors"
+                title="Increase"
+              >
+                +
+              </button>
+            </div>
+          </div>
           <span className={`text-lg font-bold ${progress >= 100 ? 'text-emerald-500' : 'text-primary-600 dark:text-primary-400'}`}>
             {progress}%
           </span>
@@ -83,6 +116,11 @@ function GoalCard({ goal, onEdit, onDelete }: { goal: Goal; onEdit: () => void; 
           <span className="flex items-center gap-1">
             <Calendar size={11} />
             {format(new Date(goal.deadline), 'MMM d, yyyy')}
+          </span>
+        )}
+        {goal.habitId && (
+          <span className="flex items-center gap-1 text-primary-500 font-medium">
+            🔄 Syncing to Habit
           </span>
         )}
         {progress >= 100 && (
@@ -113,6 +151,7 @@ function GoalFormModal({
       deadline: goal?.deadline ? goal.deadline.slice(0, 10) : '',
       category: goal?.category ?? '',
       status: goal?.status ?? 'active',
+      createLinkedHabit: false,
     },
   });
 
@@ -179,6 +218,20 @@ function GoalFormModal({
             <textarea {...register('description')} id="goal-description" rows={2} className="input resize-none" placeholder="Why is this goal important?" />
           </div>
 
+          {!goal && (
+            <div className="flex items-center gap-2 mt-2 border-t border-surface-100 dark:border-surface-800 pt-3">
+              <input
+                {...register('createLinkedHabit')}
+                type="checkbox"
+                id="create-linked-habit"
+                className="w-4 h-4 rounded border-surface-300 text-primary-600 focus:ring-primary-500"
+              />
+              <label htmlFor="create-linked-habit" className="text-sm font-medium text-surface-700 dark:text-surface-300">
+                Automatically create a daily habit to track this goal
+              </label>
+            </div>
+          )}
+
           <div className="flex gap-3 pt-1">
             <button type="button" onClick={onClose} className="btn-ghost flex-1">Cancel</button>
             <motion.button whileTap={{ scale: 0.97 }} type="submit" disabled={isSubmitting} className="btn-primary flex-1 justify-center" id="goal-save-btn">
@@ -199,6 +252,13 @@ export default function GoalsPage() {
   const { data: goals, isLoading } = useQuery({
     queryKey: ['goals'],
     queryFn: goalsApi.getAll,
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Partial<Goal> }) => goalsApi.update(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['goals'] });
+    },
   });
 
   const deleteMutation = useMutation({
@@ -249,6 +309,7 @@ export default function GoalsPage() {
                     goal={goal}
                     onEdit={() => { setEditGoal(goal); setShowForm(true); }}
                     onDelete={() => { if (confirm('Delete this goal?')) deleteMutation.mutate(goal._id); }}
+                    onProgressChange={(newProgress) => updateMutation.mutate({ id: goal._id, data: { currentValue: newProgress } })}
                   />
                 ))}
               </AnimatePresence>
@@ -263,6 +324,7 @@ export default function GoalsPage() {
                   goal={goal}
                   onEdit={() => { setEditGoal(goal); setShowForm(true); }}
                   onDelete={() => deleteMutation.mutate(goal._id)}
+                  onProgressChange={(newProgress) => updateMutation.mutate({ id: goal._id, data: { currentValue: newProgress } })}
                 />
               ))}
             </div>
