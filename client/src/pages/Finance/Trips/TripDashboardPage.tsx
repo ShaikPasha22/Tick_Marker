@@ -174,24 +174,21 @@ export default function TripDashboardPage() {
 
           {/* Key Metrics Grid */}
           <div className="grid grid-cols-2 gap-4">
-            <MetricCard 
-              label="Avg Daily Spend" 
-              value={`${trip.currency} ${Math.round(metrics.averageDaily).toLocaleString('en-IN')}`} 
-              color="var(--text-primary)"
+            <MetricCard
+              label="Avg Daily Spend"
+              value={`${trip.currency} ${Math.round(metrics.averageDaily).toLocaleString('en-IN')}`}
             />
             {trip.budget > 0 && (
-              <MetricCard 
-                label="Suggested Daily" 
-                value={`${trip.currency} ${Math.round(metrics.suggestedDaily).toLocaleString('en-IN')}`} 
+              <MetricCard
+                label="Suggested Daily"
+                value={`${trip.currency} ${Math.round(metrics.suggestedDaily).toLocaleString('en-IN')}`}
                 sub={`${metrics.daysRemaining} days left`}
-                color="#10b981"
               />
             )}
             {trip.budget === 0 && (
-              <MetricCard 
-                label="Total Spent" 
-                value={`${trip.currency} ${summary.totalSpent.toLocaleString('en-IN')}`} 
-                color="var(--text-primary)"
+              <MetricCard
+                label="Total Spent"
+                value={`${trip.currency} ${summary.totalSpent.toLocaleString('en-IN')}`}
               />
             )}
           </div>
@@ -208,7 +205,7 @@ export default function TripDashboardPage() {
                   className="input h-9 text-xs px-2"
                 />
                 {dateFilter && <button className="text-xs font-semibold text-red-500 hover:underline" onClick={() => setDateFilter('')}>Clear</button>}
-                <span className="text-sm text-surface-500 ml-2">{(summary as any).transactionCount ?? expenses?.length ?? 0} expenses</span>
+                <span className="text-sm text-surface-500 ml-2">{(summary as any).transactionCount ?? groupedExpenses?.flatMap(g => g.expenses ?? g).length ?? 0} expenses</span>
               </div>
             </div>
 

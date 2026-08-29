@@ -15,7 +15,7 @@ import type { Expense, Income, ExpenseCategory } from '../../types';
 type ViewMode = 'all' | 'expenses' | 'income';
 
 export default function TransactionsPage() {
-  const { fmt } = useCurrency();
+  useCurrency();
   const queryClient = useQueryClient();
   const [mode, setMode] = useState<ViewMode>('all');
   const [search, setSearch] = useState('');
