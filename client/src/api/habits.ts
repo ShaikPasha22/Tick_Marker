@@ -41,4 +41,7 @@ export const habitsApi = {
 
   reorder: (order: { id: string; order: number }[]) =>
     api.patch('/habits/reorder', { order }).then((r) => r.data),
+
+  getStreak: (habitId: string) =>
+    api.get<{ current: number; longest: number }>(`/analytics/streaks/${habitId}`).then((r) => r.data as any),
 };

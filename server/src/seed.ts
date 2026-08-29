@@ -247,43 +247,72 @@ export async function seedDatabase() {
   await HabitCompletion.insertMany(completions, { ordered: false }).catch(() => {});
   console.log(`✅ Seeded ${completions.length} completion records`);
 
-  // Create goals
-  await Goal.insertMany([
+  // Find created habits for linking
+  const exerciseHabit = habits.find((h) => h.name === 'Exercise');
+  const readHabit = habits.find((h) => h.name === 'Read');
+  const pythonHabit = habits.find((h) => h.name === 'Study Python');
+
+  const getCompletionsCount = (habitId: any) => {
+    return completions.filter(
+      (c: any) => c.habitId.toString() === habitId.toString() && c.status === 'completed'
+    ).length;
+  };
+
+  // Create goals with linked habits
+  const seededGoals = await Goal.insertMany([
     {
       userId,
       title: 'Read 20 Books This Year',
       description: 'Expand knowledge through consistent reading',
       targetValue: 20,
-      currentValue: 7,
+      currentValue: readHabit ? getCompletionsCount(readHabit._id) : 7,
       unit: 'books',
       deadline: new Date(today.getFullYear(), 11, 31),
       status: 'active',
       category: 'Learning',
+      habitId: readHabit?._id,
     },
     {
       userId,
       title: 'Exercise 150 Times This Year',
       description: 'Build a consistent fitness routine',
       targetValue: 150,
-      currentValue: 67,
+      currentValue: exerciseHabit ? getCompletionsCount(exerciseHabit._id) : 67,
       unit: 'sessions',
       deadline: new Date(today.getFullYear(), 11, 31),
       status: 'active',
       category: 'Fitness',
+      habitId: exerciseHabit?._id,
     },
     {
       userId,
       title: 'Study 200 Hours of Python',
       description: 'Become proficient in Python development',
       targetValue: 200,
-      currentValue: 48,
+      currentValue: pythonHabit ? getCompletionsCount(pythonHabit._id) : 48,
       unit: 'hours',
       deadline: new Date(today.getFullYear(), 11, 31),
       status: 'active',
       category: 'Learning',
+      habitId: pythonHabit?._id,
     },
   ]);
-  console.log('🎯 Created 3 goals');
+
+  // Update back-reference on habits
+  if (exerciseHabit) {
+    exerciseHabit.goalId = seededGoals.find((g) => g.title.includes('Exercise'))?._id;
+    await exerciseHabit.save();
+  }
+  if (readHabit) {
+    readHabit.goalId = seededGoals.find((g) => g.title.includes('Read'))?._id;
+    await readHabit.save();
+  }
+  if (pythonHabit) {
+    pythonHabit.goalId = seededGoals.find((g) => g.title.includes('Study'))?._id;
+    await pythonHabit.save();
+  }
+
+  console.log('🎯 Created 3 goals and linked them with habits');
 
   // ─── Finance Seed Data ────────────────────────────────────────────────────
 

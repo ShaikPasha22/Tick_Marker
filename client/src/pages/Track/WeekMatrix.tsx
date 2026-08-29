@@ -1,8 +1,10 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { format, startOfWeek, addDays, isToday } from 'date-fns';
 import { completionsApi } from '../../api/completions';
-import type { Habit } from '../../types';
+import type { Habit, CompletionStatus } from '../../types';
 import { motion } from 'framer-motion';
+import toast from 'react-hot-toast';
+
 
 const STATUS_EMOJI: Record<string, string> = {
   completed: '✓',
@@ -19,6 +21,7 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 export default function WeekMatrix({ habits }: { habits: Habit[] }) {
+  const queryClient = useQueryClient();
   const weekStart = startOfWeek(new Date(), { weekStartsOn: 1 }); // Monday
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
   const fromStr = format(weekDays[0], 'yyyy-MM-dd');
@@ -29,11 +32,53 @@ export default function WeekMatrix({ habits }: { habits: Habit[] }) {
     queryFn: () => completionsApi.getRange(fromStr, toStr),
   });
 
-  const getStatus = (habitId: string, date: Date) => {
+  const getCompletionRecord = (habitId: string, date: Date) => {
     const dateStr = format(date, 'yyyy-MM-dd');
     return completions?.find(
       (c) => c.habitId === habitId && c.date.slice(0, 10) === dateStr
-    )?.status;
+    );
+  };
+
+  const getStatus = (habitId: string, date: Date) => {
+    return getCompletionRecord(habitId, date)?.status;
+  };
+
+  const logMutation = useMutation({
+    mutationFn: ({ habitId, dateStr, status }: { habitId: string; dateStr: string; status: CompletionStatus }) =>
+      completionsApi.log(habitId, dateStr, status),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['completions'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['goals'] });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => completionsApi.delete(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['completions'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['goals'] });
+    },
+  });
+
+  const handleCellClick = (habit: Habit, day: Date) => {
+    const record = getCompletionRecord(habit._id, day);
+    const dateStr = format(day, 'yyyy-MM-dd');
+
+    if (!record) {
+      logMutation.mutate({ habitId: habit._id, dateStr, status: 'completed' });
+      toast.success(`${habit.name} checked! ✓`);
+    } else if (record.status === 'completed') {
+      logMutation.mutate({ habitId: habit._id, dateStr, status: 'missed' });
+      toast.error(`${habit.name} missed ✕`);
+    } else if (record.status === 'missed') {
+      logMutation.mutate({ habitId: habit._id, dateStr, status: 'skipped' });
+      toast.success(`${habit.name} skipped —`);
+    } else if (record.status === 'skipped') {
+      deleteMutation.mutate(record._id);
+      toast.success(`${habit.name} cleared`);
+    }
   };
 
   const activeHabits = habits.filter((h) => h.status !== 'archived');
@@ -83,14 +128,20 @@ export default function WeekMatrix({ habits }: { habits: Habit[] }) {
                     const status = getStatus(habit._id, day);
                     return (
                       <td key={day.toISOString()} className={`p-2 text-center ${isToday(day) ? 'bg-primary-50/50 dark:bg-primary-900/10' : ''}`}>
-                        {status ? (
-                          <div className={`w-9 h-9 rounded-lg mx-auto flex items-center justify-center text-xs font-bold ${STATUS_COLORS[status]}`}
-                            title={status}>
-                            {STATUS_EMOJI[status]}
-                          </div>
-                        ) : (
-                          <div className="w-9 h-9 rounded-lg mx-auto bg-surface-100 dark:bg-surface-800" />
-                        )}
+                        <button
+                          type="button"
+                          onClick={() => handleCellClick(habit, day)}
+                          className="w-9 h-9 rounded-lg mx-auto flex items-center justify-center transition-all hover:scale-105 active:scale-95 focus:outline-none cursor-pointer"
+                          title="Click to toggle status (Completed -> Missed -> Skipped -> None)"
+                        >
+                          {status ? (
+                            <div className={`w-full h-full rounded-lg flex items-center justify-center text-xs font-bold ${STATUS_COLORS[status]}`}>
+                              {STATUS_EMOJI[status]}
+                            </div>
+                          ) : (
+                            <div className="w-full h-full rounded-lg bg-surface-100 dark:bg-surface-800 border border-transparent hover:border-surface-300 dark:hover:border-surface-700" />
+                          )}
+                        </button>
                       </td>
                     );
                   })}

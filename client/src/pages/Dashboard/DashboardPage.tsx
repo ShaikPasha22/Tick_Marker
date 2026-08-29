@@ -31,11 +31,18 @@ function StatCard({ icon: Icon, label, value, sub, color }: {
 function ProgressRing({ rate, size = 80 }: { rate: number; size?: number }) {
   const radius = (size - 12) / 2;
   const circumference = 2 * Math.PI * radius;
+  // dashOffset = circumference means 0% (empty ring), 0 means 100% (full ring)
   const dashOffset = circumference - (rate / 100) * circumference;
 
   return (
     <svg width={size} height={size} className="progress-ring shrink-0">
-      <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="currentColor" strokeWidth={6} className="text-surface-200 dark:text-surface-700" />
+      {/* Track circle */}
+      <circle
+        cx={size / 2} cy={size / 2} r={radius}
+        fill="none" stroke="currentColor" strokeWidth={6}
+        className="text-surface-200 dark:text-surface-700"
+      />
+      {/* Progress arc — rotated -90° so it starts at 12 o'clock */}
       <motion.circle
         cx={size / 2} cy={size / 2} r={radius}
         fill="none" stroke="#6366f1" strokeWidth={6}
@@ -44,6 +51,7 @@ function ProgressRing({ rate, size = 80 }: { rate: number; size?: number }) {
         initial={{ strokeDashoffset: circumference }}
         animate={{ strokeDashoffset: dashOffset }}
         transition={{ duration: 1, ease: 'easeOut' }}
+        transform={`rotate(-90 ${size / 2} ${size / 2})`}
       />
       <text x={size / 2} y={size / 2 + 5} textAnchor="middle" className="text-xs font-bold fill-surface-900 dark:fill-surface-100" fontSize={14}>
         {rate}%
