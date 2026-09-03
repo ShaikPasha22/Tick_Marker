@@ -22,6 +22,9 @@ import targetRoutes from './routes/target.routes';
 
 const app = express();
 
+// Trust proxy for Render / Vercel / reverse proxies (fixes express-rate-limit ERR_ERL_UNEXPECTED_X_FORWARDED_FOR)
+app.set('trust proxy', 1);
+
 // Security
 app.use(helmet());
 app.use(
