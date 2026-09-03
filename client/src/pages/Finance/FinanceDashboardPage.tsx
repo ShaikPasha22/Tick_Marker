@@ -18,7 +18,7 @@ import AddIncomeModal from '../../components/finance/AddIncomeModal';
 import TransactionCard from '../../components/finance/TransactionCard';
 import BudgetProgressBar from '../../components/finance/BudgetProgressBar';
 import FinanceSubNav from '../../components/finance/FinanceSubNav';
-import type { FinancialInsight } from '../../types';
+import type { FinancialInsight, Expense, Income } from '../../types';
 
 function MetricCard({
   label, value, sub, icon: Icon, iconColor, bgColor, trend, highlight
@@ -91,6 +91,8 @@ const CustomTooltip = ({ active, payload, label, symbol }: any) => {
 export default function FinanceDashboardPage() {
   const [showAddExpense, setShowAddExpense] = useState(false);
   const [showAddIncome, setShowAddIncome] = useState(false);
+  const [editExpense, setEditExpense] = useState<Expense | null>(null);
+  const [editIncome, setEditIncome] = useState<Income | null>(null);
   const { fmt, symbol } = useCurrency();
   const queryClient = useQueryClient();
 
@@ -412,6 +414,13 @@ export default function FinanceDashboardPage() {
                 transaction={tx}
                 type={tx.transactionType}
                 compact
+                onClick={() => {
+                  if (tx.transactionType === 'expense') {
+                    setEditExpense(tx);
+                  } else {
+                    setEditIncome(tx);
+                  }
+                }}
                 onDelete={() => {
                   if (confirm('Delete this transaction?')) {
                     if (tx.transactionType === 'expense') {
@@ -429,8 +438,18 @@ export default function FinanceDashboardPage() {
 
       {/* Modals */}
       <AnimatePresence>
-        {showAddExpense && <AddExpenseModal onClose={() => setShowAddExpense(false)} />}
-        {showAddIncome && <AddIncomeModal onClose={() => setShowAddIncome(false)} />}
+        {(showAddExpense || editExpense) && (
+          <AddExpenseModal
+            expense={editExpense}
+            onClose={() => { setShowAddExpense(false); setEditExpense(null); }}
+          />
+        )}
+        {(showAddIncome || editIncome) && (
+          <AddIncomeModal
+            income={editIncome}
+            onClose={() => { setShowAddIncome(false); setEditIncome(null); }}
+          />
+        )}
       </AnimatePresence>
     </div>
   );

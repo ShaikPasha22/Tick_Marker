@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion';
 import { format } from 'date-fns';
-import { Trash2, ArrowUpRight, ArrowDownRight, RotateCcw } from 'lucide-react';
+import { Trash2, Pencil, ArrowUpRight, ArrowDownRight, RotateCcw } from 'lucide-react';
 import type { Expense, Income, ExpenseCategory, PaymentMethod } from '../../types';
 import { useCurrency } from '../../store/financeStore';
 
@@ -118,20 +118,37 @@ export default function TransactionCard({
         </div>
       </div>
 
-      {/* Delete button */}
-      {onDelete && (
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onDelete();
-          }}
-          className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20
-                     text-surface-400 hover:text-red-500 transition-all shrink-0"
-          aria-label="Delete transaction"
-        >
-          <Trash2 size={13} />
-        </button>
-      )}
+      {/* Action buttons (Edit & Delete) */}
+      <div className="flex items-center gap-1 shrink-0">
+        {onClick && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onClick();
+            }}
+            className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg hover:bg-surface-200 dark:hover:bg-surface-700
+                       text-surface-400 hover:text-surface-700 dark:hover:text-surface-200 transition-all"
+            aria-label="Edit transaction"
+            title="Edit transaction"
+          >
+            <Pencil size={13} />
+          </button>
+        )}
+        {onDelete && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete();
+            }}
+            className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20
+                       text-surface-400 hover:text-red-500 transition-all"
+            aria-label="Delete transaction"
+            title="Delete transaction"
+          >
+            <Trash2 size={13} />
+          </button>
+        )}
+      </div>
     </motion.div>
   );
 }

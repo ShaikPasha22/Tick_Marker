@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useQueryClient, useMutation, useQuery } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
-import { X, AlertTriangle } from 'lucide-react';
+import { X, AlertTriangle, Plus, Check } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 import { expensesApi, expenseCategoriesApi, paymentMethodsApi } from '../../api/finance';
@@ -30,6 +30,37 @@ export default function AddExpenseModal({ onClose, expense, prefilledDate }: Add
   useCurrency();
   const queryClient = useQueryClient();
   const [unusualWarning, setUnusualWarning] = useState<string | null>(null);
+
+  const [showAddCategory, setShowAddCategory] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [newCategoryIcon, setNewCategoryIcon] = useState('🍿');
+  const [newCategoryColor, setNewCategoryColor] = useState('#6366f1');
+  const [isCreatingCategory, setIsCreatingCategory] = useState(false);
+
+  const EMOJI_PRESETS = ['🍿', '☕', '🎮', '🏋️', '🐶', '🍕', '🚗', '🎁', '💊', '⚡', '💡', '✈️', '🛒', '🛍️', '📦'];
+  const COLOR_PRESETS = ['#ef4444', '#f97316', '#f59e0b', '#10b981', '#06b6d4', '#3b82f6', '#6366f1', '#8b5cf6', '#ec4899', '#71717a'];
+
+  const handleCreateCategory = async () => {
+    if (!newCategoryName.trim()) return;
+    try {
+      setIsCreatingCategory(true);
+      const newCat = await expenseCategoriesApi.create({
+        name: newCategoryName.trim(),
+        icon: newCategoryIcon,
+        color: newCategoryColor,
+        type: 'expense',
+      });
+      await queryClient.invalidateQueries({ queryKey: ['expense-categories'] });
+      setValue('categoryId', newCat._id);
+      toast.success(`Category "${newCat.name}" created!`);
+      setNewCategoryName('');
+      setShowAddCategory(false);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'Failed to create category');
+    } finally {
+      setIsCreatingCategory(false);
+    }
+  };
 
   const { data: categories = [] } = useQuery({
     queryKey: ['expense-categories', 'expense'],
@@ -196,21 +227,112 @@ export default function AddExpenseModal({ onClose, expense, prefilledDate }: Add
 
             {/* Category — quick select grid */}
             <div>
-              <label className="block text-xs font-semibold text-surface-500 uppercase tracking-wider mb-2">
-                Category *
-              </label>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-xs font-semibold text-surface-500 uppercase tracking-wider">
+                  Category *
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setShowAddCategory(!showAddCategory)}
+                  className="text-xs text-primary-600 dark:text-primary-400 hover:underline flex items-center gap-1 font-medium"
+                  id="add-custom-category-toggle"
+                >
+                  <Plus size={13} /> Custom Category
+                </button>
+              </div>
+
+              {/* Inline Custom Category Creator */}
+              <AnimatePresence>
+                {showAddCategory && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="mb-3 p-3 rounded-2xl bg-surface-50 dark:bg-surface-800/80 border border-primary-200 dark:border-primary-800 space-y-2.5 overflow-hidden"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-surface-800 dark:text-surface-200">Add Customized Category</span>
+                      <button type="button" onClick={() => setShowAddCategory(false)} className="text-surface-400 hover:text-surface-600">
+                        <X size={14} />
+                      </button>
+                    </div>
+
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={newCategoryName}
+                        onChange={(e) => setNewCategoryName(e.target.value)}
+                        placeholder="Category Name (e.g. Snacks, Coffee)"
+                        className="input py-1.5 text-xs flex-1"
+                        id="custom-category-name-input"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleCreateCategory}
+                        disabled={!newCategoryName.trim() || isCreatingCategory}
+                        className="btn-primary py-1.5 px-3 text-xs bg-primary-600 hover:bg-primary-700 text-white shrink-0"
+                        id="save-custom-category-btn"
+                      >
+                        {isCreatingCategory ? 'Adding...' : 'Add'}
+                      </button>
+                    </div>
+
+                    {/* Emoji Preset selection */}
+                    <div>
+                      <span className="text-[10px] text-surface-400 font-medium block mb-1">Choose Icon</span>
+                      <div className="flex gap-1.5 flex-wrap">
+                        {EMOJI_PRESETS.map((emoji) => (
+                          <button
+                            key={emoji}
+                            type="button"
+                            onClick={() => setNewCategoryIcon(emoji)}
+                            className={`w-7 h-7 rounded-lg text-sm flex items-center justify-center transition-all ${
+                              newCategoryIcon === emoji
+                                ? 'bg-white dark:bg-surface-700 shadow ring-2 ring-primary-500 scale-105'
+                                : 'hover:bg-surface-200 dark:hover:bg-surface-700'
+                            }`}
+                          >
+                            {emoji}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Color Palette selection */}
+                    <div>
+                      <span className="text-[10px] text-surface-400 font-medium block mb-1">Choose Color</span>
+                      <div className="flex gap-1.5 flex-wrap">
+                        {COLOR_PRESETS.map((color) => (
+                          <button
+                            key={color}
+                            type="button"
+                            onClick={() => setNewCategoryColor(color)}
+                            className={`w-6 h-6 rounded-full transition-all flex items-center justify-center ${
+                              newCategoryColor === color ? 'ring-2 ring-offset-1 ring-primary-500 scale-110' : 'hover:scale-105'
+                            }`}
+                            style={{ backgroundColor: color }}
+                          >
+                            {newCategoryColor === color && <Check size={12} className="text-white drop-shadow" />}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
               {categories.length === 0 ? (
                 <div className="text-center py-4">
                   <p className="text-sm text-surface-500 dark:text-surface-400">
                     No expense categories found.
                   </p>
-                  <a
-                    href="/finance/categories"
+                  <button
+                    type="button"
+                    onClick={() => setShowAddCategory(true)}
                     className="text-xs text-primary-600 dark:text-primary-400 underline mt-1 inline-block"
-                    onClick={onClose}
                   >
-                    Go to Categories to create some →
-                  </a>
+                    + Create a custom category
+                  </button>
                 </div>
               ) : (
                 <div className="grid grid-cols-4 sm:grid-cols-5 gap-2">
@@ -232,11 +354,24 @@ export default function AddExpenseModal({ onClose, expense, prefilledDate }: Add
                       >
                         {cat.icon}
                       </span>
-                      <span className="text-[10px] font-medium text-surface-600 dark:text-surface-400 leading-tight">
+                      <span className="text-[10px] font-medium text-surface-600 dark:text-surface-400 leading-tight truncate w-full">
                         {cat.name.split('/')[0].trim()}
                       </span>
                     </button>
                   ))}
+
+                  {/* + Custom Category Tile */}
+                  <button
+                    type="button"
+                    onClick={() => setShowAddCategory(true)}
+                    className="flex flex-col items-center justify-center gap-1 p-2 rounded-xl border-2 border-dashed border-primary-300 dark:border-primary-700 hover:border-primary-500 hover:bg-primary-50 dark:hover:bg-primary-900/20 text-primary-600 dark:text-primary-400 transition-all text-center"
+                    id="add-custom-category-tile"
+                  >
+                    <span className="w-9 h-9 rounded-lg flex items-center justify-center text-lg bg-primary-100 dark:bg-primary-900/40">
+                      <Plus size={16} />
+                    </span>
+                    <span className="text-[10px] font-medium leading-tight">+ Custom</span>
+                  </button>
                 </div>
               )}
               {!selectedCategoryId && (

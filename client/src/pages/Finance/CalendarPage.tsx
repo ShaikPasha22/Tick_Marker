@@ -9,7 +9,8 @@ import { useCurrency } from '../../store/financeStore';
 import FinanceSubNav from '../../components/finance/FinanceSubNav';
 import TransactionCard from '../../components/finance/TransactionCard';
 import AddExpenseModal from '../../components/finance/AddExpenseModal';
-import type { CalendarDay } from '../../types';
+import AddIncomeModal from '../../components/finance/AddIncomeModal';
+import type { CalendarDay, Expense, Income } from '../../types';
 
 const WEEKDAY_HEADERS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
@@ -75,6 +76,8 @@ export default function CalendarPage() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [showAddExpense, setShowAddExpense] = useState(false);
+  const [editExpense, setEditExpense] = useState<Expense | null>(null);
+  const [editIncome, setEditIncome] = useState<Income | null>(null);
   const { fmt } = useCurrency();
   const queryClient = useQueryClient();
 
@@ -252,7 +255,13 @@ export default function CalendarPage() {
               <div className="mb-3">
                 <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wide mb-2">Income</p>
                 {dayIncomes.incomes.map((income) => (
-                  <TransactionCard key={income._id} transaction={income} type="income" compact />
+                  <TransactionCard
+                    key={income._id}
+                    transaction={income}
+                    type="income"
+                    compact
+                    onClick={() => setEditIncome(income)}
+                  />
                 ))}
               </div>
             )}
@@ -267,6 +276,7 @@ export default function CalendarPage() {
                     transaction={expense}
                     type="expense"
                     compact
+                    onClick={() => setEditExpense(expense)}
                     onDelete={() => {
                       if (confirm('Delete this expense?')) deleteExpenseMutation.mutate(expense._id);
                     }}
@@ -292,10 +302,17 @@ export default function CalendarPage() {
       </AnimatePresence>
 
       <AnimatePresence>
-        {showAddExpense && (
+        {(showAddExpense || editExpense) && (
           <AddExpenseModal
-            onClose={() => setShowAddExpense(false)}
+            expense={editExpense}
+            onClose={() => { setShowAddExpense(false); setEditExpense(null); }}
             prefilledDate={selectedDate ?? undefined}
+          />
+        )}
+        {editIncome && (
+          <AddIncomeModal
+            income={editIncome}
+            onClose={() => setEditIncome(null)}
           />
         )}
       </AnimatePresence>
