@@ -15,7 +15,7 @@ export const getDashboard = async (req: AuthRequest, res: Response, next: NextFu
     const timezone = req.userTimezone || 'UTC';
     const today = toUTCMidnight(new Date());
 
-    const habits = await Habit.find({ userId, status: { $ne: 'archived' } });
+    const habits = await Habit.find({ userId, status: { $ne: 'archived' }, showOnDashboard: { $ne: false } });
 
     // Today's summary
     const todaySummary = await getDaySummary(userId, today, habits);
@@ -139,7 +139,7 @@ export const getInsights = async (req: AuthRequest, res: Response, next: NextFun
     const userId = new Types.ObjectId(req.userId!);
     const timezone = req.userTimezone || 'UTC';
 
-    const habits = await Habit.find({ userId, status: 'active' });
+    const habits = await Habit.find({ userId, status: 'active', showOnDashboard: { $ne: false } });
     const insights = await generateInsights(userId, habits, timezone);
 
     res.json({ insights });

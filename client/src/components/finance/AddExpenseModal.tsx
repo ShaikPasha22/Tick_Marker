@@ -47,6 +47,7 @@ export default function AddExpenseModal({ onClose, expense, prefilledDate }: Add
     register,
     handleSubmit,
     watch,
+    getValues,
     setValue,
     formState: { isSubmitting, errors },
   } = useForm<FormData>({
@@ -78,9 +79,18 @@ export default function AddExpenseModal({ onClose, expense, prefilledDate }: Add
     }
   }, [paymentMethods, expense, setValue]);
 
+  // Auto-select first category if none is selected and categories have loaded
+  useEffect(() => {
+    if (!expense && categories.length > 0 && !getValues('categoryId')) {
+      setValue('categoryId', categories[0]._id);
+    }
+  }, [categories, expense, setValue, getValues]);
+
   const { mutateAsync } = useMutation({
     mutationFn: (data: any): Promise<{ expense: Expense; unusualWarning: any }> =>
-      (expense ? expensesApi.update(expense._id, data) : expensesApi.create(data)) as Promise<{ expense: Expense; unusualWarning: any }>,
+      expense
+        ? expensesApi.update(expense._id, data).then((exp) => ({ expense: exp, unusualWarning: null }))
+        : expensesApi.create(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['finance'] });
       queryClient.invalidateQueries({ queryKey: ['finance-dashboard'] });
@@ -189,31 +199,46 @@ export default function AddExpenseModal({ onClose, expense, prefilledDate }: Add
               <label className="block text-xs font-semibold text-surface-500 uppercase tracking-wider mb-2">
                 Category *
               </label>
-              <div className="grid grid-cols-4 sm:grid-cols-5 gap-2">
-                {categories.map((cat) => (
-                  <button
-                    key={cat._id}
-                    type="button"
-                    onClick={() => setValue('categoryId', cat._id)}
-                    className={`flex flex-col items-center gap-1 p-2 rounded-xl border-2 transition-all text-center
-                      ${selectedCategoryId === cat._id
-                        ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
-                        : 'border-transparent hover:border-surface-200 dark:hover:border-surface-700 hover:bg-surface-50 dark:hover:bg-surface-800'
-                      }`}
-                    id={`category-${cat.name.toLowerCase().replace(/\s/g, '-')}`}
+              {categories.length === 0 ? (
+                <div className="text-center py-4">
+                  <p className="text-sm text-surface-500 dark:text-surface-400">
+                    No expense categories found.
+                  </p>
+                  <a
+                    href="/finance/categories"
+                    className="text-xs text-primary-600 dark:text-primary-400 underline mt-1 inline-block"
+                    onClick={onClose}
                   >
-                    <span
-                      className="w-9 h-9 rounded-lg flex items-center justify-center text-lg"
-                      style={{ backgroundColor: `${cat.color}20` }}
+                    Go to Categories to create some →
+                  </a>
+                </div>
+              ) : (
+                <div className="grid grid-cols-4 sm:grid-cols-5 gap-2">
+                  {categories.map((cat) => (
+                    <button
+                      key={cat._id}
+                      type="button"
+                      onClick={() => setValue('categoryId', cat._id)}
+                      className={`flex flex-col items-center gap-1 p-2 rounded-xl border-2 transition-all text-center
+                        ${selectedCategoryId === cat._id
+                          ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
+                          : 'border-transparent hover:border-surface-200 dark:hover:border-surface-700 hover:bg-surface-50 dark:hover:bg-surface-800'
+                        }`}
+                      id={`category-${cat.name.toLowerCase().replace(/\s/g, '-')}`}
                     >
-                      {cat.icon}
-                    </span>
-                    <span className="text-[10px] font-medium text-surface-600 dark:text-surface-400 leading-tight">
-                      {cat.name.split('/')[0].trim()}
-                    </span>
-                  </button>
-                ))}
-              </div>
+                      <span
+                        className="w-9 h-9 rounded-lg flex items-center justify-center text-lg"
+                        style={{ backgroundColor: `${cat.color}20` }}
+                      >
+                        {cat.icon}
+                      </span>
+                      <span className="text-[10px] font-medium text-surface-600 dark:text-surface-400 leading-tight">
+                        {cat.name.split('/')[0].trim()}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
               {!selectedCategoryId && (
                 <p className="text-xs text-surface-400 mt-1">Select a category</p>
               )}

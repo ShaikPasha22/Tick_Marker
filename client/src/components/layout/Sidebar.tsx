@@ -1,7 +1,7 @@
 import { NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, CheckSquare, BarChart3, Target,
-  Settings, Zap, LogOut, Plus, Wallet
+  Settings, Zap, LogOut, Plus, Wallet, Layers, Flag
 } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { motion } from 'framer-motion';
@@ -12,6 +12,8 @@ const navItems = [
   { to: '/habits', icon: Zap, label: 'Habits' },
   { to: '/analytics', icon: BarChart3, label: 'Analytics' },
   { to: '/goals', icon: Target, label: 'Goals' },
+  { to: '/swot', icon: Layers, label: 'SWOT' },
+  { to: '/targets', icon: Flag, label: 'Targets' },
 ];
 
 const financeNavItems = [

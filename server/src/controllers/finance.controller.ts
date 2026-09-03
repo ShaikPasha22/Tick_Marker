@@ -20,7 +20,7 @@ import {
   detectUnusualSpending,
 } from '../services/financialAnalytics.service';
 import { Budget } from '../models/Budget';
-import { ExpenseCategory } from '../models/ExpenseCategory';
+import { ExpenseCategory, DEFAULT_EXPENSE_CATEGORIES, DEFAULT_INCOME_CATEGORIES } from '../models/ExpenseCategory';
 import { ExpenseTag } from '../models/ExpenseTag';
 import { PaymentMethod } from '../models/PaymentMethod';
 import { FinancialSettings } from '../models/FinancialSettings';
@@ -425,7 +425,24 @@ export const getExpenseCategories = async (req: AuthRequest, res: Response, next
     if (status) filter.status = status;
     else filter.status = 'active';
 
-    const categories = await ExpenseCategory.find(filter).sort({ order: 1, name: 1 });
+    let categories = await ExpenseCategory.find(filter).sort({ order: 1, name: 1 });
+
+    // Auto-seed default categories for existing users who have none
+    if (categories.length === 0) {
+      const anyExist = await ExpenseCategory.countDocuments({ userId });
+      if (anyExist === 0) {
+        await Promise.all([
+          ExpenseCategory.insertMany(
+            DEFAULT_EXPENSE_CATEGORIES.map((cat) => ({ ...cat, userId, type: 'expense', isDefault: true }))
+          ),
+          ExpenseCategory.insertMany(
+            DEFAULT_INCOME_CATEGORIES.map((cat) => ({ ...cat, userId, type: 'income', isDefault: true }))
+          ),
+        ]);
+        categories = await ExpenseCategory.find(filter).sort({ order: 1, name: 1 });
+      }
+    }
+
     res.json({ categories });
   } catch (error) { next(error); }
 };

@@ -16,6 +16,9 @@ import financeRoutes from './routes/finance.routes';
 import tripRoutes from './routes/trip.routes';
 import analyticsRoutes from './routes/analytics.routes';
 import exportRoutes from './routes/export.routes';
+import swotRoutes from './routes/swot.routes';
+import taskRoutes from './routes/task.routes';
+import targetRoutes from './routes/target.routes';
 
 const app = express();
 
@@ -67,6 +70,9 @@ app.use('/api/finance', financeRoutes);
 app.use('/api/trips', tripRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/export', exportRoutes);
+app.use('/api/swot', swotRoutes);
+app.use('/api/tasks', taskRoutes);
+app.use('/api/targets', targetRoutes);
 
 // 404
 app.use(notFound);

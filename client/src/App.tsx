@@ -18,6 +18,9 @@ const HabitsPage = lazy(() => import('./pages/Habits/HabitsPage'));
 const AnalyticsPage = lazy(() => import('./pages/Analytics/AnalyticsPage'));
 const GoalsPage = lazy(() => import('./pages/Goals/GoalsPage'));
 const SettingsPage = lazy(() => import('./pages/Settings/SettingsPage'));
+const SwotListPage = lazy(() => import('./pages/SWOT/SwotListPage'));
+const SwotWorkspace = lazy(() => import('./pages/SWOT/SwotWorkspace'));
+const TargetsPage = lazy(() => import('./pages/Targets/TargetsPage'));
 
 // Finance module pages
 const FinanceDashboardPage = lazy(() => import('./pages/Finance/FinanceDashboardPage'));
@@ -109,6 +112,9 @@ function App() {
           <Route path="/habits" element={<HabitsPage />} />
           <Route path="/analytics" element={<AnalyticsPage />} />
           <Route path="/goals" element={<GoalsPage />} />
+          <Route path="/swot" element={<SwotListPage />} />
+          <Route path="/swot/:id" element={<SwotWorkspace />} />
+          <Route path="/targets" element={<TargetsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
 
           {/* Finance module */}

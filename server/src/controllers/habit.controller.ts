@@ -3,14 +3,26 @@ import { Types } from 'mongoose';
 import { Habit } from '../models/Habit';
 import { AuthRequest } from '../middleware/auth';
 import { createError } from '../middleware/errorHandler';
+import { GoalSyncService } from '../services/goalSync.service';
 
 // GET /api/habits
 export const getHabits = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const { status, category } = req.query;
+    const { status, category, scope, goalId } = req.query;
     const filter: Record<string, unknown> = { userId: req.userId };
     if (status) filter.status = status;
     if (category) filter.category = category;
+
+    if (scope === 'dashboard') {
+      filter.showOnDashboard = { $ne: false };
+    } else if (scope === 'goal' && goalId) {
+      filter.goalId = new Types.ObjectId(goalId as string);
+    } else if (scope === 'all') {
+      // no extra filter
+    } else {
+      // default: dashboard view (hide goal-specific trackers)
+      filter.showOnDashboard = { $ne: false };
+    }
 
     const habits = await Habit.find(filter).sort({ order: 1, createdAt: 1 });
     res.json({ habits });
@@ -62,7 +74,29 @@ export const updateHabit = async (req: AuthRequest, res: Response, next: NextFun
 // DELETE /api/habits/:id — soft delete (archive)
 export const deleteHabit = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const { permanent } = req.query;
+    const { permanent, confirmLink } = req.query;
+
+    const habit = await Habit.findOne({ _id: req.params.id, userId: req.userId });
+    if (!habit) throw createError('Habit not found', 404);
+
+    if (habit.goalId && confirmLink !== 'true') {
+      res.status(400).json({
+        warning: true,
+        message: `This tracker is linked to a Goal. Deleting it will remove it from the Goal. Proceed?`
+      });
+      return;
+    }
+
+    if (habit.goalId) {
+      const { Goal } = await import('../models/Goal');
+      await Goal.updateOne(
+        { _id: habit.goalId, userId: req.userId },
+        {
+          $pull: { trackerIds: habit._id },
+          $unset: { habitId: habit._id }
+        }
+      );
+    }
 
     if (permanent === 'true') {
       const { HabitCompletion } = await import('../models/HabitCompletion');
@@ -76,6 +110,10 @@ export const deleteHabit = async (req: AuthRequest, res: Response, next: NextFun
         { status: 'archived' },
         { new: true }
       );
+    }
+
+    if (habit.goalId) {
+      await GoalSyncService.syncGoalProgress(habit.goalId);
     }
 
     res.json({ message: 'Habit removed successfully' });

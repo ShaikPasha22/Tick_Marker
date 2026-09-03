@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { Flame, Trophy, TrendingUp, Clock, AlertTriangle, ChevronRight, Plus, Lightbulb } from 'lucide-react';
 import { analyticsApi } from '../../api/analytics';
 import { completionsApi } from '../../api/completions';
+import { goalsApi } from '../../api/goals';
 import { useAuthStore } from '../../store/authStore';
 import { format } from 'date-fns';
 import type { DayHabitEntry } from '../../types';
@@ -80,6 +81,11 @@ export default function DashboardPage() {
     queryKey: ['insights'],
     queryFn: analyticsApi.getInsights,
     staleTime: 1000 * 60 * 5,
+  });
+
+  const { data: goals } = useQuery({
+    queryKey: ['goals'],
+    queryFn: goalsApi.getAll,
   });
 
   const pending = dayView?.habits.filter((h) => !h.completion || h.completion.status === 'missed') ?? [];
@@ -176,25 +182,42 @@ export default function DashboardPage() {
             </div>
           ) : (
             <div className="space-y-2">
-              {pending.slice(0, 4).map(({ habit }: DayHabitEntry) => (
-                <Link
-                  key={habit._id}
-                  to="/track"
-                  className="flex items-center gap-3 p-3 rounded-xl hover:bg-surface-50 dark:hover:bg-surface-800 transition-colors"
-                >
-                  <div
-                    className="w-9 h-9 rounded-xl flex items-center justify-center text-lg shrink-0"
-                    style={{ backgroundColor: `${habit.color}20` }}
+              {pending.slice(0, 4).map(({ habit }: DayHabitEntry) => {
+                const linkedGoal = goals?.find((g) => g._id === habit.goalId);
+                return (
+                  <Link
+                    key={habit._id}
+                    to="/track"
+                    className="flex items-center gap-3 p-3 rounded-xl hover:bg-surface-50 dark:hover:bg-surface-800 transition-colors"
                   >
-                    {habit.icon}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-surface-900 dark:text-surface-100 truncate">{habit.name}</p>
-                    <p className="text-xs text-surface-400">{habit.target} {habit.unit}</p>
-                  </div>
-                  <ChevronRight size={14} className="text-surface-400 shrink-0" />
-                </Link>
-              ))}
+                    <div
+                      className="w-9 h-9 rounded-xl flex items-center justify-center text-lg shrink-0"
+                      style={{ backgroundColor: `${habit.color}20` }}
+                    >
+                      {habit.icon}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="font-medium text-surface-900 dark:text-surface-100 truncate">{habit.name}</p>
+                        {linkedGoal && (
+                          <button
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              window.location.href = `/goals?details=${linkedGoal._id}`;
+                            }}
+                            className="badge bg-blue-50 dark:bg-blue-950/20 text-blue-600 dark:text-blue-400 text-[9px] font-bold py-0.5 px-1.5 rounded hover:underline shrink-0"
+                          >
+                            🎯 {linkedGoal.title}
+                          </button>
+                        )}
+                      </div>
+                      <p className="text-xs text-surface-400">{habit.target} {habit.unit}</p>
+                    </div>
+                    <ChevronRight size={14} className="text-surface-400 shrink-0" />
+                  </Link>
+                );
+              })}
               {pending.length > 4 && (
                 <Link to="/track" className="block text-center text-sm text-primary-600 dark:text-primary-400 py-2">
                   +{pending.length - 4} more →

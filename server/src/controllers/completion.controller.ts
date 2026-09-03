@@ -102,7 +102,11 @@ export const getDayView = async (req: AuthRequest, res: Response, next: NextFunc
     if (!date) throw createError('date query parameter required', 400);
 
     const utcDate = toUTCMidnight(new Date(date as string));
-    const habits = await Habit.find({ userId: req.userId, status: { $ne: 'archived' } });
+    const habits = await Habit.find({
+      userId: req.userId,
+      status: { $ne: 'archived' },
+      showOnDashboard: { $ne: false }
+    });
 
     const scheduledHabits = habits.filter((h) => isHabitScheduledOn(h, utcDate));
 

@@ -1,17 +1,19 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useForm } from 'react-hook-form';
-import { Plus, Target, Trash2, X, Calendar, Edit2 } from 'lucide-react';
+import { Plus, Target, Trash2, X, Calendar, Edit2, Link2, Unlink, Eye, EyeOff } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { format, startOfMonth, endOfMonth, getDaysInMonth, getDay, addMonths, subMonths, isToday, startOfWeek, addDays } from 'date-fns';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
 
 import { goalsApi } from '../../api/goals';
 import { habitsApi } from '../../api/habits';
 import { completionsApi } from '../../api/completions';
 import { analyticsApi } from '../../api/analytics';
-import type { Goal } from '../../types';
+import type { Goal, Habit } from '../../types';
+import GoalTrackerFormModal from './GoalTrackerFormModal';
 
 
 function GoalCard({
@@ -207,7 +209,12 @@ function GoalOverviewView({
 
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [heatmapYear, setHeatmapYear] = useState(new Date().getFullYear());
-  const [trackerTab, setTrackerTab] = useState<'weekly' | 'monthly' | 'heatmap'>('monthly');
+  const [trackerTab, setTrackerTab] = useState<'trackers' | 'weekly' | 'monthly' | 'heatmap'>('trackers');
+
+  const [selectedCalendarHabitId, setSelectedCalendarHabitId] = useState<string | null>(null);
+  const [showTrackerModal, setShowTrackerModal] = useState(false);
+  const [editingTracker, setEditingTracker] = useState<Habit | null>(null);
+  const [showLinkHabitDropdown, setShowLinkHabitDropdown] = useState(false);
 
   const monthStart = startOfMonth(currentMonth);
   const monthEnd = endOfMonth(currentMonth);
@@ -217,26 +224,143 @@ function GoalOverviewView({
   const fromStr = format(monthStart, 'yyyy-MM-dd');
   const toStr = format(monthEnd, 'yyyy-MM-dd');
 
-  // Query habit completions for this month
+  // Query all habits to select for linking
+  const { data: allHabits } = useQuery({
+    queryKey: ['habits', 'all'],
+    queryFn: () => habitsApi.getAll({ scope: 'all' }),
+  });
+
+  // Query goal trackers
+  const { data: trackers } = useQuery({
+    queryKey: ['habits', 'goal', goal._id],
+    queryFn: () => habitsApi.getAll({ scope: 'goal', goalId: goal._id }),
+  });
+
+  const activeTrackers = trackers ?? [];
+  const currentTrackerId = selectedCalendarHabitId || activeTrackers[0]?._id || goal.habitId;
+
+  // Query habit completions for selected tracker
   const { data: completions } = useQuery({
-    queryKey: ['goal-completions', goal._id, fromStr, toStr],
-    queryFn: () => completionsApi.getRange(fromStr, toStr, goal.habitId),
-    enabled: !!goal.habitId,
+    queryKey: ['goal-completions', goal._id, currentTrackerId, fromStr, toStr],
+    queryFn: () => completionsApi.getRange(fromStr, toStr, currentTrackerId),
+    enabled: !!currentTrackerId,
   });
 
-  // Query habit streak
+  // Query habit streak for selected tracker
   const { data: streak } = useQuery({
-    queryKey: ['habit-streak', goal.habitId],
-    queryFn: () => habitsApi.getStreak(goal.habitId!),
-    enabled: !!goal.habitId,
+    queryKey: ['habit-streak', currentTrackerId],
+    queryFn: () => habitsApi.getStreak(currentTrackerId!),
+    enabled: !!currentTrackerId,
   });
 
-  // Query heatmap data
+  // Query heatmap data for selected tracker
   const { data: heatmapData } = useQuery({
-    queryKey: ['goal-heatmap', goal.habitId, heatmapYear],
-    queryFn: () => analyticsApi.getHeatmap(heatmapYear, goal.habitId!),
-    enabled: !!goal.habitId && trackerTab === 'heatmap',
+    queryKey: ['goal-heatmap', currentTrackerId, heatmapYear],
+    queryFn: () => analyticsApi.getHeatmap(heatmapYear, currentTrackerId!),
+    enabled: !!currentTrackerId && trackerTab === 'heatmap',
   });
+
+  const todayStr = format(new Date(), 'yyyy-MM-dd');
+  const { data: todayView } = useQuery({
+    queryKey: ['completions', 'day', todayStr],
+    queryFn: () => completionsApi.getDay(todayStr),
+  });
+
+  // Actions / Mutations
+  const trackerCheckInMutation = useMutation({
+    mutationFn: ({ habitId, status, value }: { habitId: string; status: any; value?: number }) =>
+      completionsApi.log(habitId, todayStr, status, value),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['goals'] });
+      queryClient.invalidateQueries({ queryKey: ['completions'] });
+      queryClient.invalidateQueries({ queryKey: ['habit-streak'] });
+      queryClient.invalidateQueries({ queryKey: ['goal-completions'] });
+      queryClient.invalidateQueries({ queryKey: ['goal-heatmap'] });
+    },
+  });
+
+  const linkTrackerMutation = useMutation({
+    mutationFn: (habitId: string) => goalsApi.linkExistingTracker(goal._id, habitId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['goals'] });
+      queryClient.invalidateQueries({ queryKey: ['habits'] });
+      queryClient.invalidateQueries({ queryKey: ['completions'] });
+      toast.success('Habit linked to Goal successfully!');
+      setShowLinkHabitDropdown(false);
+    },
+  });
+
+  const unlinkTrackerMutation = useMutation({
+    mutationFn: (habitId: string) => goalsApi.unlinkTracker(goal._id, habitId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['goals'] });
+      queryClient.invalidateQueries({ queryKey: ['habits'] });
+      queryClient.invalidateQueries({ queryKey: ['completions'] });
+      toast.success('Tracker unlinked from Goal successfully!');
+    },
+  });
+
+  const toggleDashboardMutation = useMutation({
+    mutationFn: ({ habitId, visible }: { habitId: string; visible: boolean }) =>
+      goalsApi.toggleDashboard(goal._id, habitId, visible),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['goals'] });
+      queryClient.invalidateQueries({ queryKey: ['habits'] });
+      queryClient.invalidateQueries({ queryKey: ['completions'] });
+      toast.success('Dashboard visibility updated!');
+    },
+  });
+
+  const deleteTrackerMutation = useMutation({
+    mutationFn: ({ id, permanent, confirmLink }: { id: string; permanent?: boolean; confirmLink?: boolean }) =>
+      habitsApi.delete(id, permanent, confirmLink),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['goals'] });
+      queryClient.invalidateQueries({ queryKey: ['habits'] });
+      queryClient.invalidateQueries({ queryKey: ['completions'] });
+      queryClient.invalidateQueries({ queryKey: ['goal-heatmap'] });
+      toast.success('Tracker deleted successfully!');
+    },
+    onError: async (err: any) => {
+      if (err.response?.data?.warning) {
+        if (confirm(err.response.data.message)) {
+          deleteTrackerMutation.mutate({ id: err.config.url.split('/').pop(), permanent: true, confirmLink: true });
+        }
+      } else {
+        toast.error('Failed to delete tracker');
+      }
+    }
+  });
+
+  const toggleBinaryTracker = (tracker: Habit) => {
+    const val = getTrackerValueToday(tracker._id);
+    const isDone = val >= tracker.target;
+    trackerCheckInMutation.mutate({
+      habitId: tracker._id,
+      status: isDone ? 'missed' : 'completed',
+      value: isDone ? 0 : tracker.target,
+    });
+  };
+
+  const getTrackerValueToday = (trackerId: string) => {
+    const entry = todayView?.habits.find((h) => h.habit._id === trackerId);
+    if (!entry?.completion) return 0;
+    return entry.completion.value ?? (entry.completion.status === 'completed' ? entry.habit.target : 0);
+  };
+
+  const setTrackerValueToday = (tracker: Habit, val: number) => {
+    let status: any = 'missed';
+    if (val >= tracker.target) {
+      status = 'completed';
+    } else if (val > 0) {
+      status = 'partial';
+    }
+    trackerCheckInMutation.mutate({
+      habitId: tracker._id,
+      status,
+      value: val,
+    });
+  };
 
   const getDayStatus = (day: number) => {
     if (!completions) return null;
@@ -251,7 +375,7 @@ function GoalOverviewView({
   };
 
   const handleCellClick = (date: Date) => {
-    if (!goal.habitId) return;
+    if (!currentTrackerId) return;
     const dateStr = format(date, 'yyyy-MM-dd');
     const existing = getCompletionRecordForDate(date);
 
@@ -263,9 +387,9 @@ function GoalOverviewView({
     };
 
     if (!existing) {
-      completionsApi.log(goal.habitId, dateStr, 'completed').then(refreshQueries);
+      completionsApi.log(currentTrackerId, dateStr, 'completed').then(refreshQueries);
     } else if (existing.status === 'completed') {
-      completionsApi.log(goal.habitId, dateStr, 'missed').then(refreshQueries);
+      completionsApi.log(currentTrackerId, dateStr, 'missed').then(refreshQueries);
     } else {
       completionsApi.delete(existing._id).then(refreshQueries);
     }
@@ -312,6 +436,7 @@ function GoalOverviewView({
   };
 
   const compactWeeks = getCompactWeeks();
+  const linkableHabits = allHabits?.filter((h) => h.goalId !== goal._id) ?? [];
 
   return (
     <motion.div
@@ -330,23 +455,21 @@ function GoalOverviewView({
         <span className="text-xs font-bold text-surface-400 uppercase">Goal Overview</span>
       </div>
 
-      {/* Broad Overview Card */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* Left: Circular progress & primary actions */}
-        <div className="card p-6 border flex flex-col items-center justify-center text-center space-y-4 md:col-span-1">
-          <div className="relative w-36 h-36 flex items-center justify-center">
-            {/* SVG Circle Progress */}
-            <svg className="w-full h-full transform -rotate-90">
+        {/* Left: Quick Overview Card */}
+        <div className="card p-6 border flex flex-col items-center text-center gap-5 justify-between">
+          <div className="relative flex items-center justify-center">
+            <svg width="160" height="160" className="progress-ring">
               <circle
-                cx="72"
-                cy="72"
+                cx="80"
+                cy="80"
                 r={radius}
                 className="stroke-surface-100 dark:stroke-surface-800 fill-transparent"
                 strokeWidth={strokeWidth}
               />
               <motion.circle
-                cx="72"
-                cy="72"
+                cx="80"
+                cy="80"
                 r={radius}
                 className="stroke-primary-500 fill-transparent"
                 strokeWidth={strokeWidth}
@@ -355,7 +478,7 @@ function GoalOverviewView({
                 animate={{ strokeDashoffset }}
                 transition={{ duration: 1, ease: 'easeOut' }}
                 strokeLinecap="round"
-                transform="rotate(-90 72 72)"
+                transform="rotate(-90 80 80)"
               />
             </svg>
             <div className="absolute flex flex-col items-center">
@@ -378,7 +501,7 @@ function GoalOverviewView({
             <span className="text-surface-400"> / {goal.targetValue} {goal.unit}</span>
           </div>
 
-          {/* Quick Check-in — always shown, works for all goals */}
+          {/* Quick Check-in */}
           <button
             onClick={onToggleDoneToday}
             className={`w-full py-2.5 rounded-xl font-bold text-sm shadow-sm transition-all
@@ -427,9 +550,9 @@ function GoalOverviewView({
             </div>
           )}
 
-          {/* Selector Tab for Weekly/Monthly/Heatmap — always shown */}
-          <div className="flex bg-surface-100 dark:bg-surface-800 rounded-xl p-1 gap-1 w-full sm:w-auto">
-            {(['weekly', 'monthly', 'heatmap'] as const).map((tab) => (
+          {/* Selector Tab for Weekly/Monthly/Heatmap/Trackers */}
+          <div className="flex bg-surface-100 dark:bg-surface-800 rounded-xl p-1 gap-1 w-full sm:w-auto overflow-x-auto">
+            {(['trackers', 'weekly', 'monthly', 'heatmap'] as const).map((tab) => (
               <button
                 key={tab}
                 type="button"
@@ -440,14 +563,199 @@ function GoalOverviewView({
                     : 'text-surface-500 hover:text-surface-700 dark:hover:text-surface-300'
                 }`}
               >
-                {tab === 'heatmap' ? 'Heatmap 📊' : `${tab} View`}
+                {tab === 'heatmap' ? 'Heatmap 📊' : tab === 'trackers' ? 'Trackers 🔢' : `${tab} View`}
               </button>
             ))}
           </div>
 
+          {/* Active tracker dropdown selector (for calendar/heatmap tabs) */}
+          {trackerTab !== 'trackers' && activeTrackers.length > 0 && (
+            <div className="flex items-center gap-2 text-xs font-semibold text-surface-600 dark:text-surface-300">
+              <span>View stats for:</span>
+              <select
+                value={currentTrackerId || ''}
+                onChange={(e) => setSelectedCalendarHabitId(e.target.value)}
+                className="input py-1 px-2.5 rounded-lg bg-surface-100 dark:bg-surface-800 border-none"
+              >
+                {activeTrackers.map((t) => (
+                  <option key={t._id} value={t._id}>
+                    {t.icon} {t.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           {/* Selected tracker layout */}
           <div className="space-y-4 pt-2 border-t">
-            {trackerTab === 'weekly' ? (
+            {trackerTab === 'trackers' ? (
+              /* TRACKERS LIST VIEW */
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-bold text-surface-700 dark:text-surface-300 uppercase tracking-wider">Goal Trackers</h4>
+                  <div className="flex gap-2">
+                    {/* Link existing habit */}
+                    <div className="relative">
+                      <button
+                        onClick={() => setShowLinkHabitDropdown(!showLinkHabitDropdown)}
+                        className="btn-ghost py-1 px-2.5 rounded-lg text-xs font-semibold flex items-center gap-1 border border-surface-200 dark:border-surface-800"
+                      >
+                        <Link2 size={13} /> Link Habit
+                      </button>
+                      
+                      {showLinkHabitDropdown && (
+                        <div className="absolute right-0 mt-1 w-64 bg-white dark:bg-surface-900 border border-surface-200 dark:border-surface-800 rounded-xl shadow-xl z-20 p-2 space-y-2">
+                          <p className="text-[10px] font-bold text-surface-400 uppercase px-2 py-1">Link dashboard habit</p>
+                          <div className="max-h-48 overflow-y-auto space-y-1">
+                            {linkableHabits.length > 0 ? (
+                              linkableHabits.map((h) => (
+                                <button
+                                  key={h._id}
+                                  type="button"
+                                  onClick={() => linkTrackerMutation.mutate(h._id)}
+                                  className="w-full text-left px-2 py-1.5 rounded-lg hover:bg-surface-50 dark:hover:bg-surface-800 text-xs flex items-center justify-between text-surface-700 dark:text-surface-300"
+                                >
+                                  <span className="truncate">{h.icon} {h.name}</span>
+                                  <Plus size={12} className="shrink-0 text-surface-400" />
+                                </button>
+                              ))
+                            ) : (
+                              <p className="text-[11px] text-surface-400 text-center py-4">No other habits available</p>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    <button
+                      onClick={() => { setEditingTracker(null); setShowTrackerModal(true); }}
+                      className="btn-primary py-1 px-2.5 rounded-lg text-xs font-semibold flex items-center gap-1"
+                    >
+                      <Plus size={13} /> Add Tracker
+                    </button>
+                  </div>
+                </div>
+
+                {activeTrackers.length === 0 ? (
+                  <div className="text-center py-10 border border-dashed rounded-xl space-y-2">
+                    <p className="text-2xl">🔢</p>
+                    <p className="text-xs text-surface-500">No trackers added to this goal yet.</p>
+                    <button
+                      onClick={() => { setEditingTracker(null); setShowTrackerModal(true); }}
+                      className="btn-ghost text-xs text-primary-600 font-semibold"
+                    >
+                      Create your first tracker
+                    </button>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 gap-3">
+                    {activeTrackers.map((t) => {
+                      const val = getTrackerValueToday(t._id);
+                      const isDone = val >= t.target;
+                      
+                      return (
+                        <div key={t._id} className="p-4 rounded-xl border bg-surface-50/20 dark:bg-surface-900/10 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                          <div className="flex items-center gap-3">
+                            <span className="w-10 h-10 rounded-xl flex items-center justify-center text-lg shrink-0" style={{ backgroundColor: `${t.color}15`, color: t.color }}>
+                              {t.icon}
+                            </span>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <h5 className="text-sm font-bold text-surface-900 dark:text-surface-50">{t.name}</h5>
+                                <span className="text-[9px] uppercase font-bold px-1.5 py-0.5 rounded bg-surface-100 dark:bg-surface-800 text-surface-400">
+                                  {t.type}
+                                </span>
+                              </div>
+                              <p className="text-xs text-surface-400 mt-0.5">
+                                Target: {t.target} {t.unit} / day
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-4 justify-between sm:justify-end shrink-0">
+                            {/* Today's logging/check-in */}
+                            <div className="flex items-center gap-2">
+                              {t.type === 'binary' ? (
+                                <button
+                                  onClick={() => toggleBinaryTracker(t)}
+                                  className={`py-1 px-3 rounded-lg text-xs font-bold transition-all ${
+                                    isDone
+                                      ? 'bg-emerald-500 text-white'
+                                      : 'bg-surface-100 dark:bg-surface-800 text-surface-700 dark:text-surface-300 hover:bg-surface-200'
+                                  }`}
+                                >
+                                  {isDone ? '✓ Completed' : 'Mark Done'}
+                                </button>
+                              ) : (
+                                <div className="flex items-center border rounded-lg bg-white dark:bg-surface-900 px-1 py-0.5 gap-1.5">
+                                  <button
+                                    onClick={() => setTrackerValueToday(t, Math.max(0, val - 1))}
+                                    className="p-1 text-surface-450 dark:text-surface-500 hover:text-surface-700 font-bold"
+                                  >
+                                    -
+                                  </button>
+                                  <span className="text-xs font-bold min-w-[20px] text-center">{val}</span>
+                                  <button
+                                    onClick={() => setTrackerValueToday(t, val + 1)}
+                                    className="p-1 text-surface-450 dark:text-surface-500 hover:text-surface-700 font-bold"
+                                  >
+                                    +
+                                  </button>
+                                  <span className="text-[10px] text-surface-400">/ {t.target} {t.unit}</span>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Options */}
+                            <div className="flex items-center gap-2 border-l pl-3 border-surface-200 dark:border-surface-800">
+                              {/* Dashboard Visibility Toggle */}
+                              <button
+                                onClick={() => toggleDashboardMutation.mutate({ habitId: t._id, visible: !t.showOnDashboard })}
+                                className={`p-1.5 rounded-lg transition-colors ${
+                                  t.showOnDashboard
+                                    ? 'text-primary-500 hover:bg-primary-50 dark:hover:bg-primary-950/20'
+                                    : 'text-surface-400 hover:bg-surface-100 dark:hover:bg-surface-800'
+                                }`}
+                                title={t.showOnDashboard ? 'Shown on Main Dashboard' : 'Hidden from Dashboard'}
+                              >
+                                {t.showOnDashboard ? <Eye size={15} /> : <EyeOff size={15} />}
+                              </button>
+
+                              {/* Edit */}
+                              <button
+                                onClick={() => { setEditingTracker(t); setShowTrackerModal(true); }}
+                                className="p-1.5 rounded-lg text-surface-500 hover:bg-surface-100 dark:hover:bg-surface-800 hover:text-surface-800"
+                                title="Edit Tracker"
+                              >
+                                <Edit2 size={15} />
+                              </button>
+
+                              {/* Unlink from Goal */}
+                              <button
+                                onClick={() => { if (confirm('Unlink this tracker from this goal? It will become a regular habit.')) unlinkTrackerMutation.mutate(t._id); }}
+                                className="p-1.5 rounded-lg text-surface-500 hover:bg-surface-100 dark:hover:bg-surface-800 hover:text-red-500"
+                                title="Unlink from Goal"
+                              >
+                                <Unlink size={15} />
+                              </button>
+
+                              {/* Delete */}
+                              <button
+                                onClick={() => { if (confirm('Delete this tracker permanently? This will remove all progress history.')) deleteTrackerMutation.mutate({ id: t._id }); }}
+                                className="p-1.5 rounded-lg text-surface-400 hover:bg-red-55 hover:text-red-500"
+                                title="Delete Tracker"
+                              >
+                                <Trash2 size={15} />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            ) : trackerTab === 'weekly' ? (
               /* WEEKLY CHECK-IN TIMELINE */
               <div className="space-y-3">
                 <h4 className="text-xs font-bold text-surface-700 dark:text-surface-300 uppercase tracking-wider">Weekly Activity</h4>
@@ -590,7 +898,7 @@ function GoalOverviewView({
                                   title={`${day.date}: ${day.completed ? 'Goal Pursued ✓' : 'No Check-in'} (${day.rate}%)`}
                                   className={`w-[11px] h-[11px] rounded-sm transition-all hover:scale-110 relative
                                     ${isGoalStart ? 'ring-1 ring-blue-500 ring-offset-1' : ''}
-                                    ${isGoalEnd ? 'ring-1 ring-red-500 ring-offset-1' : ''}`}
+                                    ${isGoalEnd ? 'ring-1 ring-red-55 ring-offset-1' : ''}`}
                                   style={{
                                     backgroundColor: getHeatmapColor(day.rate),
                                   }}
@@ -617,10 +925,18 @@ function GoalOverviewView({
           </div>
         </div>
       </div>
+
+      {showTrackerModal && (
+        <GoalTrackerFormModal
+          goal={goal}
+          tracker={editingTracker}
+          onClose={() => { setShowTrackerModal(false); setEditingTracker(null); }}
+          onSave={() => { setShowTrackerModal(false); setEditingTracker(null); }}
+        />
+      )}
     </motion.div>
   );
-}
-function GoalFormModal({
+}function GoalFormModal({
   goal,
   onClose,
   onSave,
@@ -637,6 +953,7 @@ function GoalFormModal({
       targetValue: goal?.targetValue ?? 10,
       currentValue: goal?.currentValue ?? 0,
       unit: goal?.unit ?? 'times',
+      startDate: goal?.startDate ? goal.startDate.slice(0, 10) : new Date().toISOString().slice(0, 10),
       deadline: goal?.deadline ? goal.deadline.slice(0, 10) : '',
       category: goal?.category ?? '',
       status: goal?.status ?? 'active',
@@ -698,9 +1015,15 @@ function GoalFormModal({
             <input {...register('currentValue')} type="number" id="goal-current" className="input" min={0} />
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">Deadline (optional)</label>
-            <input {...register('deadline')} type="date" id="goal-deadline" className="input" />
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">Start Date *</label>
+              <input {...register('startDate', { required: true })} type="date" id="goal-start-date" className="input" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">Deadline (optional)</label>
+              <input {...register('deadline')} type="date" id="goal-deadline" className="input" />
+            </div>
           </div>
 
           <div>
@@ -732,11 +1055,22 @@ export default function GoalsPage() {
   const [editGoal, setEditGoal] = useState<Goal | null>(null);
   const [selectedDetailsGoal, setSelectedDetailsGoal] = useState<Goal | null>(null);
   const queryClient = useQueryClient();
+  const [searchParams] = useSearchParams();
 
   const { data: goals, isLoading } = useQuery({
     queryKey: ['goals'],
     queryFn: goalsApi.getAll,
   });
+
+  useEffect(() => {
+    const detailsId = searchParams.get('details');
+    if (detailsId && goals) {
+      const match = goals.find((g) => g._id === detailsId);
+      if (match) {
+        setSelectedDetailsGoal(match);
+      }
+    }
+  }, [searchParams, goals]);
 
   const todayStr = format(new Date(), 'yyyy-MM-dd');
   const { data: todayView } = useQuery({

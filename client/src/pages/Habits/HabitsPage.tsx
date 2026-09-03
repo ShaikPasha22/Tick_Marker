@@ -1,21 +1,24 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, Search, Edit2, Pause, Play, MoreVertical, Archive } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { habitsApi } from '../../api/habits';
+import { goalsApi } from '../../api/goals';
 import type { Habit } from '../../types';
 import HabitForm from './HabitForm';
 
 function HabitCard({
   habit,
+  linkedGoal,
   onEdit,
   onDelete,
   onPause,
   onResume,
 }: {
   habit: Habit;
+  linkedGoal?: any;
   onEdit: () => void;
   onDelete: () => void;
   onPause: () => void;
@@ -51,6 +54,14 @@ function HabitCard({
             <span className="badge bg-surface-100 dark:bg-surface-800 text-surface-600 dark:text-surface-400 text-[10px]">
               {habit.category}
             </span>
+            {linkedGoal && (
+              <Link
+                to={`/goals?details=${linkedGoal._id}`}
+                className="badge bg-blue-50 dark:bg-blue-950/20 text-blue-600 dark:text-blue-400 text-[10px] hover:underline cursor-pointer flex items-center gap-1 shrink-0"
+              >
+                🎯 Goal: {linkedGoal.title}
+              </Link>
+            )}
             {habit.status === 'paused' && (
               <span className="badge bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 text-[10px]">Paused</span>
             )}
@@ -141,6 +152,11 @@ export default function HabitsPage() {
     queryFn: () => habitsApi.getAll({ status: statusFilter === 'all' ? undefined : statusFilter }),
   });
 
+  const { data: goals } = useQuery({
+    queryKey: ['goals'],
+    queryFn: goalsApi.getAll,
+  });
+
   const deleteMutation = useMutation({
     mutationFn: (id: string) => habitsApi.delete(id),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['habits'] }); toast.success('Habit archived'); },
@@ -226,16 +242,20 @@ export default function HabitsPage() {
       ) : (
         <AnimatePresence>
           <div className="space-y-3">
-            {filtered.map((habit) => (
-              <HabitCard
-                key={habit._id}
-                habit={habit}
-                onEdit={() => { setEditHabit(habit); setShowForm(true); }}
-                onDelete={() => deleteMutation.mutate(habit._id)}
-                onPause={() => pauseMutation.mutate(habit._id)}
-                onResume={() => resumeMutation.mutate(habit._id)}
-              />
-            ))}
+            {filtered.map((habit) => {
+              const linkedGoal = goals?.find((g) => g._id === habit.goalId);
+              return (
+                <HabitCard
+                  key={habit._id}
+                  habit={habit}
+                  linkedGoal={linkedGoal}
+                  onEdit={() => { setEditHabit(habit); setShowForm(true); }}
+                  onDelete={() => deleteMutation.mutate(habit._id)}
+                  onPause={() => pauseMutation.mutate(habit._id)}
+                  onResume={() => resumeMutation.mutate(habit._id)}
+                />
+              );
+            })}
           </div>
         </AnimatePresence>
       )}

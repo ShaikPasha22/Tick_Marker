@@ -65,6 +65,8 @@ export interface Habit {
   startDate: string;
   endDate?: string;
   goalId?: string;
+  showOnDashboard?: boolean;
+  isGoalTracker?: boolean;
   order: number;
   createdAt: string;
   updatedAt: string;
@@ -173,6 +175,8 @@ export interface Goal {
   targetValue: number;
   currentValue: number;
   unit: string;
+  trackerIds?: string[];
+  startDate?: string;
   deadline?: string;
   status: GoalStatus;
   category?: string;
@@ -536,6 +540,98 @@ export interface TripAnalyticsSummary {
     amount: number;
     isMe: boolean;
   }[];
+}
+
+// ============ SWOT & Task ============
+export type SwotQuadrant = 'strengths' | 'weaknesses' | 'opportunities' | 'threats' | 'unclassified';
+export type PriorityLevel = 'low' | 'medium' | 'high' | 'critical';
+export type ItemStatus = 'not_started' | 'in_progress' | 'completed';
+
+export interface SwotAnalysis {
+  _id: string;
+  userId: string;
+  name: string;
+  description: string;
+  category?: string;
+  startDate?: string;
+  targetDate?: string;
+  status: 'active' | 'archived';
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SwotItemHistory {
+  previousQuadrant: string;
+  newQuadrant: string;
+  previousPriority: string;
+  newPriority: string;
+  changedAt: string;
+}
+
+export interface SwotItem {
+  _id: string;
+  userId: string;
+  swotId: string;
+  title: string;
+  description?: string;
+  notes?: string;
+  quadrant: SwotQuadrant;
+  impact: PriorityLevel;
+  urgency: PriorityLevel;
+  severity: PriorityLevel;
+  priority: PriorityLevel;
+  priorityScore: number;
+  prioritySource: 'calculated' | 'manual';
+  status: ItemStatus;
+  deadline?: string;
+  position: number;
+  taskId?: string;
+  history: SwotItemHistory[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Task {
+  _id: string;
+  userId: string;
+  title: string;
+  description?: string;
+  status: 'pending' | 'completed';
+  swotId?: string;
+  swotItemId?: string;
+  dueDate?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ============ Targets ============
+export type TargetTimeframe = 'none' | 'weekly' | 'monthly' | 'yearly';
+export type TargetPriority = 'low' | 'medium' | 'high' | 'critical';
+export type TargetStatus = 'not_started' | 'in_progress' | 'completed' | 'deferred' | 'cancelled';
+export type TargetProgressType = 'percentage' | 'numeric' | 'binary';
+
+export interface Target {
+  _id: string;
+  userId: string;
+  title: string;
+  description?: string;
+  notes?: string;
+  category?: string;
+  priority: TargetPriority;
+  status: TargetStatus;
+  progress: number;
+  progressMax: number;
+  progressType: TargetProgressType;
+  isDumpItem: boolean;
+  assignedType: TargetTimeframe;
+  weekStart?: string;
+  month?: string;
+  year?: number;
+  targetDate?: string;
+  position: number;
+  linkedTaskIds: Task[];
+  createdAt: string;
+  updatedAt: string;
 }
 
 

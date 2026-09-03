@@ -49,6 +49,8 @@ export interface IHabit extends Document {
   startDate: Date;
   endDate?: Date;
   goalId?: Types.ObjectId;
+  showOnDashboard: boolean;
+  isGoalTracker: boolean;
   order: number;
   createdAt: Date;
   updatedAt: Date;
@@ -110,6 +112,8 @@ const HabitSchema = new Schema<IHabit>(
     startDate: { type: Date, default: Date.now },
     endDate: { type: Date },
     goalId: { type: Schema.Types.ObjectId, ref: 'Goal' },
+    showOnDashboard: { type: Boolean, default: true },
+    isGoalTracker: { type: Boolean, default: false },
     order: { type: Number, default: 0 },
   },
   { timestamps: true }

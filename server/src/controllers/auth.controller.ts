@@ -5,6 +5,9 @@ import { generateToken } from '../middleware/auth';
 import { createError } from '../middleware/errorHandler';
 import { env } from '../config/env';
 import nodemailer from 'nodemailer';
+import { ExpenseCategory, DEFAULT_EXPENSE_CATEGORIES, DEFAULT_INCOME_CATEGORIES } from '../models/ExpenseCategory';
+import { PaymentMethod } from '../models/PaymentMethod';
+import { FinancialSettings } from '../models/FinancialSettings';
 
 // POST /api/auth/register
 export const register = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
@@ -24,6 +27,23 @@ export const register = async (req: Request, res: Response, next: NextFunction):
     });
 
     await user.save();
+
+    // Seed default finance categories, payment method, and settings for the new user
+    try {
+      await Promise.all([
+        ExpenseCategory.insertMany(
+          DEFAULT_EXPENSE_CATEGORIES.map((cat) => ({ ...cat, userId: user._id, type: 'expense', isDefault: true }))
+        ),
+        ExpenseCategory.insertMany(
+          DEFAULT_INCOME_CATEGORIES.map((cat) => ({ ...cat, userId: user._id, type: 'income', isDefault: true }))
+        ),
+        PaymentMethod.create({ userId: user._id, name: 'Cash', icon: '💵', isDefault: true }),
+        FinancialSettings.create({ userId: user._id, setupCompleted: false }),
+      ]);
+    } catch (seedError) {
+      // Non-fatal: user is created; categories can be added later
+      console.warn('Failed to seed default categories for new user:', seedError);
+    }
 
     const token = generateToken(user._id.toString(), user.timezone);
 

@@ -19,14 +19,19 @@ export class GoalSyncService {
 
       if (habitIds.length === 0) return;
 
-      // Sum all completed records for these habits
+      // Sum all completed and partial records for these habits
       const completions = await HabitCompletion.find({
         habitId: { $in: habitIds },
-        status: 'completed',
+        status: { $in: ['completed', 'partial'] },
       });
 
       // Calculate total progress
-      const totalProgress = completions.reduce((sum, c) => sum + (c.value ?? 1), 0);
+      const totalProgress = completions.reduce((sum, c) => {
+        const val = c.value !== undefined && c.value !== null
+          ? c.value
+          : (c.status === 'completed' ? 1 : 0);
+        return sum + val;
+      }, 0);
 
       goal.currentValue = totalProgress;
 

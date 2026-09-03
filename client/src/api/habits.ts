@@ -18,7 +18,7 @@ export interface CreateHabitDto {
 }
 
 export const habitsApi = {
-  getAll: (params?: { status?: string; category?: string }) =>
+  getAll: (params?: { status?: string; category?: string; scope?: string; goalId?: string }) =>
     api.get<{ habits: Habit[] }>('/habits', { params }).then((r) => r.data.habits),
 
   getOne: (id: string) =>
@@ -30,8 +30,8 @@ export const habitsApi = {
   update: (id: string, data: Partial<CreateHabitDto & { status: string; order: number }>) =>
     api.patch<{ habit: Habit }>(`/habits/${id}`, data).then((r) => r.data.habit),
 
-  delete: (id: string, permanent = false) =>
-    api.delete(`/habits/${id}`, { params: { permanent } }).then((r) => r.data),
+  delete: (id: string, permanent = false, confirmLink = false) =>
+    api.delete(`/habits/${id}`, { params: { permanent, confirmLink } }).then((r) => r.data),
 
   pause: (id: string, from: string, to: string, reason?: string) =>
     api.post<{ habit: Habit }>(`/habits/${id}/pause`, { from, to, reason }).then((r) => r.data.habit),
