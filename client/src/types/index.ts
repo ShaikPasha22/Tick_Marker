@@ -418,7 +418,8 @@ export interface FinancialInsight {
 }
 
 export interface FinancialDashboard {
-  period: { from: string; to: string };
+  /** isFullMonth: exactly one calendar month — budget, pace and insights are only filled in then */
+  period: { from: string; to: string; isFullMonth: boolean };
   summary: FinancialSummary;
   balance: AvailableBalance;
   periodBalance: { startingBalance: number; endingBalance: number };

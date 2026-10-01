@@ -109,7 +109,8 @@ export interface FinancialInsight {
 }
 
 export interface FinancialDashboard {
-  period: { from: Date; to: Date };
+  /** isFullMonth: the range is exactly one calendar month (budget, pace and insights apply) */
+  period: { from: Date; to: Date; isFullMonth: boolean };
   summary: FinancialSummary;
   balance: AvailableBalance;
   /** Balance just before the period starts and at its last day */
@@ -748,6 +749,25 @@ export async function generateFinancialInsights(
 
 // ─── Full Dashboard ───────────────────────────────────────────────────────────
 
+/**
+ * Range covering all of a user's transactions: first transaction day up to the later
+ * of today and the last transaction day. Falls back to today when there are none.
+ */
+export async function getAllTimeRange(userId: Types.ObjectId): Promise<{ from: Date; to: Date }> {
+  const match = { userId, deletedAt: { $exists: false } };
+  const bounds = { _id: null, first: { $min: '$date' }, last: { $max: '$date' } };
+  const [exp, inc] = await Promise.all([
+    Expense.aggregate([{ $match: match }, { $group: bounds }]),
+    Income.aggregate([{ $match: match }, { $group: bounds }]),
+  ]);
+  const now = new Date();
+  const firsts = [exp[0]?.first, inc[0]?.first].filter(Boolean) as Date[];
+  const lasts = [exp[0]?.last, inc[0]?.last, now].filter(Boolean) as Date[];
+  const from = firsts.length ? new Date(Math.min(...firsts.map((d) => d.getTime()))) : now;
+  const to = new Date(Math.max(...lasts.map((d) => d.getTime())));
+  return { from: toUTCDayStart(from), to: toUTCDayEnd(to) };
+}
+
 export async function getFinancialDashboard(
   userId: Types.ObjectId,
   from: Date,
@@ -757,6 +777,10 @@ export async function getFinancialDashboard(
   const year = from.getUTCFullYear();
   const month = from.getUTCMonth() + 1;
   const dayBeforePeriod = new Date(toUTCDayStart(from).getTime() - 1);
+  const monthRange = utcMonthRange(year, month);
+  const isFullMonth =
+    toUTCDayStart(from).getTime() === monthRange.from.getTime() &&
+    toUTCDayEnd(to).getTime() === monthRange.to.getTime();
 
   const [summary, balance, startingBalance, endingBalance, categoryBreakdown, dailySpending, budgetStatus, insights, velocity, settings] =
     await Promise.all([
@@ -766,9 +790,9 @@ export async function getFinancialDashboard(
       getAvailableBalance(userId, to),
       getCategoryBreakdown(userId, from, to),
       getDailySpending(userId, from, to),
-      getBudgetStatus(userId, year, month),
-      generateFinancialInsights(userId, from, to),
-      getSpendingVelocity(userId, year, month),
+      isFullMonth ? getBudgetStatus(userId, year, month) : Promise.resolve(null),
+      isFullMonth ? generateFinancialInsights(userId, from, to) : Promise.resolve([]),
+      isFullMonth ? getSpendingVelocity(userId, year, month) : Promise.resolve(null),
       FinancialSettings.findOne({ userId }),
     ]);
 
@@ -809,7 +833,7 @@ export async function getFinancialDashboard(
   const topCategory = categoryBreakdown.length > 0 ? categoryBreakdown[0] : null;
 
   return {
-    period: { from, to },
+    period: { from, to, isFullMonth },
     summary,
     balance,
     periodBalance: {

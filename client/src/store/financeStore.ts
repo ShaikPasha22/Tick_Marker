@@ -1,9 +1,9 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { format, startOfMonth, endOfMonth } from 'date-fns';
+import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addWeeks, parseISO } from 'date-fns';
 
-
-export type PeriodType = 'day' | 'week' | 'month' | 'year' | 'custom';
+/** Range shown on the finance Overview */
+export type OverviewPeriod = 'week' | 'month' | 'all' | 'custom';
 
 export interface DateRange {
   from: string;
@@ -25,12 +25,14 @@ interface FinanceState {
   setSelectedMonth: (year: number, month: number) => void;
   shiftSelectedMonth: (delta: number) => void;
 
-  // Period selection
-  periodType: PeriodType;
-  dateRange: DateRange;
-  setPeriodType: (type: PeriodType) => void;
-  setDateRange: (range: DateRange) => void;
-  setCustomRange: (from: string, to: string) => void;
+  // Overview range: the month above, a week (any day inside it), all time, or custom dates
+  overviewPeriod: OverviewPeriod;
+  setOverviewPeriod: (period: OverviewPeriod) => void;
+  weekAnchor: string;
+  shiftWeek: (delta: number) => void;
+  resetWeek: () => void;
+  customRange: DateRange;
+  setCustomRange: (range: DateRange) => void;
 
   // Filter state
   filter: TransactionFilter;
@@ -51,34 +53,21 @@ interface FinanceState {
   resetForNewSession: () => void;
 }
 
-function getDefaultRange(type: PeriodType): DateRange {
-  const now = new Date();
-  switch (type) {
-    case 'day':
-      return { from: format(now, 'yyyy-MM-dd'), to: format(now, 'yyyy-MM-dd') };
-    case 'week': {
-      const start = new Date(now);
-      start.setDate(now.getDate() - now.getDay() + 1); // Monday
-      const end = new Date(start);
-      end.setDate(start.getDate() + 6);
-      return { from: format(start, 'yyyy-MM-dd'), to: format(end, 'yyyy-MM-dd') };
-    }
-    case 'month':
-      return {
-        from: format(startOfMonth(now), 'yyyy-MM-dd'),
-        to: format(now, 'yyyy-MM-dd'),
-      };
-    case 'year':
-      return {
-        from: format(new Date(now.getFullYear(), 0, 1), 'yyyy-MM-dd'),
-        to: format(now, 'yyyy-MM-dd'),
-      };
-    default:
-      return {
-        from: format(startOfMonth(now), 'yyyy-MM-dd'),
-        to: format(now, 'yyyy-MM-dd'),
-      };
-  }
+const today = () => format(new Date(), 'yyyy-MM-dd');
+
+/** "yyyy-MM-dd" bounds of the week containing `anchor` (weekStartsOn: 0 = Sunday, 1 = Monday) */
+export function getWeekRange(anchor: string, weekStartsOn: 0 | 1): DateRange {
+  const day = parseISO(anchor);
+  return {
+    from: format(startOfWeek(day, { weekStartsOn }), 'yyyy-MM-dd'),
+    to: format(endOfWeek(day, { weekStartsOn }), 'yyyy-MM-dd'),
+  };
+}
+
+/** Default date for a new entry in a range: today if inside it, else the range's first day */
+export function getDefaultEntryDateInRange(range: DateRange): string {
+  const now = today();
+  return now >= range.from && now <= range.to ? now : range.from;
 }
 
 /** "yyyy-MM-dd" bounds of a calendar month (month is 1-12) */
@@ -109,22 +98,22 @@ export const useFinanceStore = create<FinanceState>()(
           return { selectedYear: d.getFullYear(), selectedMonth: d.getMonth() + 1 };
         }),
 
-      periodType: 'month',
-      dateRange: getDefaultRange('month'),
+      overviewPeriod: 'month',
+      weekAnchor: today(),
+      customRange: { from: format(startOfMonth(new Date()), 'yyyy-MM-dd'), to: today() },
       filter: { page: 1 },
       showAddExpense: false,
       showAddIncome: false,
       currencySymbol: '₹',
 
-      setPeriodType: (type) => {
-        set({ periodType: type, dateRange: getDefaultRange(type) });
-      },
+      setOverviewPeriod: (period) => set({ overviewPeriod: period }),
 
-      setDateRange: (range) => set({ dateRange: range }),
+      shiftWeek: (delta) =>
+        set((s) => ({ weekAnchor: format(addWeeks(parseISO(s.weekAnchor), delta), 'yyyy-MM-dd') })),
 
-      setCustomRange: (from, to) => {
-        set({ periodType: 'custom', dateRange: { from, to } });
-      },
+      resetWeek: () => set({ weekAnchor: today() }),
+
+      setCustomRange: (range) => set({ customRange: range }),
 
       setFilter: (partial) => {
         set((s) => ({ filter: { ...s.filter, ...partial, page: partial.page ?? 1 } }));
@@ -140,8 +129,9 @@ export const useFinanceStore = create<FinanceState>()(
       resetForNewSession: () =>
         set({
           ...currentMonth(),
-          periodType: 'month',
-          dateRange: getDefaultRange('month'),
+          overviewPeriod: 'month',
+          weekAnchor: today(),
+          customRange: { from: format(startOfMonth(new Date()), 'yyyy-MM-dd'), to: today() },
           filter: { page: 1 },
           showAddExpense: false,
           showAddIncome: false,
@@ -151,7 +141,6 @@ export const useFinanceStore = create<FinanceState>()(
     {
       name: 'tickmark-finance',
       partialize: (s) => ({
-        periodType: s.periodType,
         currencySymbol: s.currencySymbol,
       }),
     }

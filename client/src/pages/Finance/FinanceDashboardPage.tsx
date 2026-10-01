@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import {
   Wallet, TrendingUp, TrendingDown, PiggyBank, BarChart2,
   Plus, Minus, AlertCircle, Zap
@@ -12,14 +12,39 @@ import {
 import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { financeDashboardApi, expensesApi, incomeApi, invalidateFinanceQueries } from '../../api/finance';
-import { useCurrency, useFinanceStore, getMonthRange, getDefaultEntryDate } from '../../store/financeStore';
+import {
+  useCurrency, useFinanceStore, getMonthRange, getWeekRange, getDefaultEntryDateInRange, type DateRange,
+} from '../../store/financeStore';
+import { useAuthStore } from '../../store/authStore';
 import AddExpenseModal from '../../components/finance/AddExpenseModal';
 import AddIncomeModal from '../../components/finance/AddIncomeModal';
 import TransactionCard from '../../components/finance/TransactionCard';
 import BudgetProgressBar from '../../components/finance/BudgetProgressBar';
 import FinanceSubNav from '../../components/finance/FinanceSubNav';
-import MonthSelector from '../../components/finance/MonthSelector';
-import type { FinancialInsight, Expense, Income } from '../../types';
+import OverviewPeriodPicker from '../../components/finance/OverviewPeriodPicker';
+import type { FinancialInsight, Expense, Income, DailySpendingItem } from '../../types';
+
+const dayLabel = (d: string) => format(parseISO(d), 'd MMM yyyy');
+
+/** "1 – 7 Oct 2026", "28 Sep – 4 Oct 2026" or "15 Dec 2025 – 10 Jan 2026" */
+function rangeLabel({ from, to }: DateRange): string {
+  if (from === to) return dayLabel(from);
+  const sameYear = from.slice(0, 4) === to.slice(0, 4);
+  return `${format(parseISO(from), sameYear ? 'd MMM' : 'd MMM yyyy')} – ${dayLabel(to)}`;
+}
+
+/** Spending chart points: per day, or per month for ranges longer than ~2 months */
+function toChartData(daily: DailySpendingItem[]) {
+  if (daily.length <= 62) {
+    return { byMonth: false, points: daily.map((d) => ({ label: format(parseISO(d.date), 'd MMM'), amount: d.amount })) };
+  }
+  const months = new Map<string, number>();
+  daily.forEach((d) => months.set(d.date.slice(0, 7), (months.get(d.date.slice(0, 7)) ?? 0) + d.amount));
+  return {
+    byMonth: true,
+    points: [...months].map(([key, amount]) => ({ label: format(parseISO(`${key}-01`), 'MMM yy'), amount })),
+  };
+}
 
 function MetricCard({
   label, value, sub, icon: Icon, iconColor, bgColor, trend, highlight
@@ -94,23 +119,47 @@ export default function FinanceDashboardPage() {
   const [showAddIncome, setShowAddIncome] = useState(false);
   const [editExpense, setEditExpense] = useState<Expense | null>(null);
   const [editIncome, setEditIncome] = useState<Income | null>(null);
-  const year = useFinanceStore((s) => s.selectedYear);
-  const month = useFinanceStore((s) => s.selectedMonth);
+  const {
+    selectedYear: year, selectedMonth: month, overviewPeriod: period, weekAnchor, customRange,
+  } = useFinanceStore();
+  const weekStartsOn = useAuthStore((s) => s.user?.weekStartDay ?? 1);
   const { fmt, symbol } = useCurrency();
   const queryClient = useQueryClient();
 
-  const selectedMonth = new Date(year, month - 1, 1);
-  const monthLabel = format(selectedMonth, 'MMMM yyyy');
-  const { from, to } = getMonthRange(year, month);
-  const newEntryDate = getDefaultEntryDate(year, month);
+  // Resolve the selected period to dates ('all' is resolved by the server)
+  const range: DateRange | null =
+    period === 'month' ? getMonthRange(year, month)
+    : period === 'week' ? getWeekRange(weekAnchor, weekStartsOn)
+    : period === 'custom' ? customRange
+    : null;
+  const rangeInvalid = period === 'custom' && (!customRange.from || !customRange.to || customRange.from > customRange.to);
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['finance-dashboard', from, to],
-    queryFn: () => financeDashboardApi.get({ from, to }),
+  const { data, isPlaceholderData } = useQuery({
+    queryKey: range ? ['finance-dashboard', range.from, range.to] : ['finance-dashboard', 'all'],
+    queryFn: () => financeDashboardApi.get(range ?? { all: true }),
+    enabled: !rangeInvalid,
     staleTime: 60 * 1000,
-    // Keep the current month on screen while the next one loads
+    // Keep the previous figures on screen (dimmed) while the next range loads
     placeholderData: keepPreviousData,
   });
+
+  const allTimeFrom = period === 'all' && data ? data.period.from.slice(0, 10) : null;
+  const periodLabel =
+    period === 'month' ? format(new Date(year, month - 1, 1), 'MMMM yyyy')
+    : period === 'all' ? 'All time'
+    : rangeLabel(range!);
+  const subtitle = allTimeFrom ? `All time · since ${dayLabel(allTimeFrom)}` : `${periodLabel} overview`;
+  const balanceTitle =
+    period === 'month' ? `Balance at end of ${format(new Date(year, month - 1, 1), 'MMMM')}`
+    : period === 'week' ? 'Balance at end of week'
+    : period === 'custom' ? `Balance on ${dayLabel(customRange.to)}`
+    : 'Current balance';
+  const startLabel =
+    period === 'month' ? 'Start of month'
+    : period === 'week' ? 'Start of week'
+    : period === 'custom' ? 'Start of period'
+    : 'Opening balance';
+  const newEntryDate = range && !rangeInvalid ? getDefaultEntryDateInRange(range) : format(new Date(), 'yyyy-MM-dd');
 
   const deleteExpenseMutation = useMutation({
     mutationFn: expensesApi.delete,
@@ -128,38 +177,14 @@ export default function FinanceDashboardPage() {
     },
   });
 
-  if (isLoading) {
-    return (
-      <div className="space-y-5">
-        <FinanceSubNav />
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {[...Array(8)].map((_, i) => <div key={i} className="skeleton h-24 rounded-2xl" />)}
-        </div>
-        <div className="skeleton h-48 rounded-2xl" />
-      </div>
-    );
-  }
-
-  if (!data) return null;
-
-  const { summary, periodBalance, budgetStatus, categoryBreakdown, dailySpending, recentTransactions, insights, velocity, averageDailySpending, topCategory } = data;
-
-  // Spending velocity bar
-  const velocityPct = velocity?.percentBudgetUsed ?? 0;
-  const monthPct = velocity?.percentMonthElapsed ?? 0;
-
-  return (
-    <div className="space-y-5">
-      <FinanceSubNav />
-
-      {/* Page Header */}
+  const header = (
+    <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-xl font-bold text-surface-900 dark:text-surface-50">Finance</h2>
-          <p className="text-sm text-surface-400">{monthLabel} overview</p>
+          <p className="text-sm text-surface-400">{subtitle}</p>
         </div>
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          <MonthSelector />
+        <div className="flex items-center gap-2">
           <motion.button
             whileTap={{ scale: 0.96 }}
             onClick={() => setShowAddIncome(true)}
@@ -180,7 +205,64 @@ export default function FinanceDashboardPage() {
           </motion.button>
         </div>
       </div>
+      <OverviewPeriodPicker />
+    </div>
+  );
 
+  const modals = (
+    <AnimatePresence>
+      {(showAddExpense || editExpense) && (
+        <AddExpenseModal
+          expense={editExpense}
+          onClose={() => { setShowAddExpense(false); setEditExpense(null); }}
+          prefilledDate={newEntryDate}
+        />
+      )}
+      {(showAddIncome || editIncome) && (
+        <AddIncomeModal
+          income={editIncome}
+          onClose={() => { setShowAddIncome(false); setEditIncome(null); }}
+          prefilledDate={newEntryDate}
+        />
+      )}
+    </AnimatePresence>
+  );
+
+  if (rangeInvalid || !data) {
+    return (
+      <div className="space-y-5">
+        <FinanceSubNav />
+        {header}
+        {rangeInvalid ? (
+          <div className="card p-6 text-center text-sm text-surface-500">
+            Choose a start date on or before the end date to see your figures.
+          </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {[...Array(8)].map((_, i) => <div key={i} className="skeleton h-24 rounded-2xl" />)}
+            </div>
+            <div className="skeleton h-48 rounded-2xl" />
+          </>
+        )}
+        {modals}
+      </div>
+    );
+  }
+
+  const { summary, periodBalance, budgetStatus, categoryBreakdown, dailySpending, recentTransactions, insights, velocity, averageDailySpending, topCategory } = data;
+
+  // Spending velocity bar
+  const velocityPct = velocity?.percentBudgetUsed ?? 0;
+  const monthPct = velocity?.percentMonthElapsed ?? 0;
+  const chart = toChartData(dailySpending);
+
+  return (
+    <div className="space-y-5">
+      <FinanceSubNav />
+      {header}
+
+      <div className={`space-y-5 transition-opacity ${isPlaceholderData ? 'opacity-60' : ''}`}>
       {/* Available Balance Hero */}
       <motion.div
         initial={{ opacity: 0, scale: 0.98 }}
@@ -189,10 +271,10 @@ export default function FinanceDashboardPage() {
       >
         <div className="absolute inset-0 bg-white/5 backdrop-blur-sm" />
         <div className="relative">
-          <p className="text-sm font-medium text-emerald-100 mb-1">Balance at end of {format(selectedMonth, 'MMMM')}</p>
+          <p className="text-sm font-medium text-emerald-100 mb-1">{balanceTitle}</p>
           <p className="text-4xl font-bold mb-1">{fmt(periodBalance.endingBalance)}</p>
           <div className="flex items-center gap-4 text-sm text-emerald-100 flex-wrap">
-            <span>Start of month: {fmt(periodBalance.startingBalance)}</span>
+            <span>{startLabel}: {fmt(periodBalance.startingBalance)}</span>
             <span>+{fmt(summary.totalIncome)} income</span>
             <span>−{fmt(summary.totalExpenses)} spent</span>
           </div>
@@ -207,11 +289,11 @@ export default function FinanceDashboardPage() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <MetricCard
           label="Total Income" value={fmt(summary.totalIncome)}
-          sub={monthLabel} icon={TrendingUp} iconColor="#10b981" bgColor="#10b98120"
+          sub={periodLabel} icon={TrendingUp} iconColor="#10b981" bgColor="#10b98120"
         />
         <MetricCard
           label="Total Expenses" value={fmt(summary.totalExpenses)}
-          sub={monthLabel} icon={TrendingDown} iconColor="#ef4444" bgColor="#ef444420"
+          sub={periodLabel} icon={TrendingDown} iconColor="#ef4444" bgColor="#ef444420"
         />
         <MetricCard
           label="Net Cash Flow" value={fmt(summary.netCashFlow)}
@@ -222,7 +304,7 @@ export default function FinanceDashboardPage() {
         />
         <MetricCard
           label="Avg Daily Spend" value={fmt(averageDailySpending)}
-          sub={monthLabel} icon={BarChart2} iconColor="#6366f1" bgColor="#6366f120"
+          sub={periodLabel} icon={BarChart2} iconColor="#6366f1" bgColor="#6366f120"
         />
 
         {budgetStatus && (
@@ -310,20 +392,20 @@ export default function FinanceDashboardPage() {
       {dailySpending.length > 0 && (
         <div className="card p-5">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="font-bold text-surface-900 dark:text-surface-50">Daily Spending</h3>
+            <h3 className="font-bold text-surface-900 dark:text-surface-50">{chart.byMonth ? 'Monthly' : 'Daily'} Spending</h3>
             <Link to="/finance/analytics" className="text-xs text-primary-600 dark:text-primary-400 hover:underline">
               Full analytics →
             </Link>
           </div>
           <ResponsiveContainer width="100%" height={120}>
-            <AreaChart data={dailySpending.slice(-14)}>
+            <AreaChart data={chart.points}>
               <defs>
                 <linearGradient id="expense-gradient" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="#ef4444" stopOpacity={0.3} />
                   <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
                 </linearGradient>
               </defs>
-              <XAxis dataKey="date" tickFormatter={(v) => format(new Date(v), 'dd')} tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
+              <XAxis dataKey="label" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} minTickGap={12} />
               <YAxis hide />
               <Tooltip content={(props) => <CustomTooltip {...props} symbol={symbol} />} />
               <Area
@@ -444,23 +526,9 @@ export default function FinanceDashboardPage() {
         </div>
       )}
 
-      {/* Modals */}
-      <AnimatePresence>
-        {(showAddExpense || editExpense) && (
-          <AddExpenseModal
-            expense={editExpense}
-            onClose={() => { setShowAddExpense(false); setEditExpense(null); }}
-            prefilledDate={newEntryDate}
-          />
-        )}
-        {(showAddIncome || editIncome) && (
-          <AddIncomeModal
-            income={editIncome}
-            onClose={() => { setShowAddIncome(false); setEditIncome(null); }}
-            prefilledDate={newEntryDate}
-          />
-        )}
-      </AnimatePresence>
+      </div>
+
+      {modals}
     </div>
   );
 }

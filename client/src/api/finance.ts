@@ -34,8 +34,11 @@ export const financeSettingsApi = {
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 
 export const financeDashboardApi = {
-  get: (params?: { from?: string; to?: string }) =>
-    api.get<FinancialDashboard>(`/finance/dashboard?${fmt(params ?? {})}`).then((r) => r.data),
+  /** `all: true` covers every transaction (the server picks the range) */
+  get: ({ all, ...range }: { from?: string; to?: string; all?: boolean } = {}) =>
+    api
+      .get<FinancialDashboard>(`/finance/dashboard?${fmt({ ...range, all: all ? 'true' : undefined })}`)
+      .then((r) => r.data),
 };
 
 // ─── Analytics ────────────────────────────────────────────────────────────────

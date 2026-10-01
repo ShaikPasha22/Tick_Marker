@@ -16,6 +16,7 @@ import {
   getSpendingVelocity,
   generateFinancialInsights,
   getAvailableBalance,
+  getAllTimeRange,
   toUTCDayStart,
   toUTCDayEnd,
   getCalendarData,
@@ -66,8 +67,15 @@ export const getDashboard = async (req: AuthRequest, res: Response, next: NextFu
   try {
     const userId = new Types.ObjectId(req.userId!);
     const now = new Date();
-    const from = parseDate(req.query.from as string, startOfMonth(now));
-    const to = parseDate(req.query.to as string, now);
+    let from: Date;
+    let to: Date;
+    if (req.query.all === 'true') {
+      ({ from, to } = await getAllTimeRange(userId));
+    } else {
+      from = parseDate(req.query.from as string, startOfMonth(now));
+      to = parseDate(req.query.to as string, now);
+      if (from > to) [from, to] = [to, from];
+    }
 
     const dashboard = await getFinancialDashboard(userId, from, to);
     res.json(dashboard);
