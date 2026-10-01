@@ -35,10 +35,10 @@ export default function FinanceSettingsPage() {
 
   useEffect(() => {
     if (settings) {
-      setOpeningBalance(String(settings.openingBalance));
+      setOpeningBalance(settings.openingBalance ? String(settings.openingBalance) : '');
       setCurrency(settings.currency);
       setCurrencySymbolLocal(settings.currencySymbol);
-      setLowBalanceThreshold(String(settings.lowBalanceThreshold));
+      setLowBalanceThreshold(settings.lowBalanceThreshold ? String(settings.lowBalanceThreshold) : '');
       setBudgetAlertThresholds(settings.budgetAlertThresholds.map(String));
     }
   }, [settings]);

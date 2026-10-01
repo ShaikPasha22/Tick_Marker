@@ -16,6 +16,8 @@ import {
   getSpendingVelocity,
   generateFinancialInsights,
   getAvailableBalance,
+  toUTCDayStart,
+  toUTCDayEnd,
   getCalendarData,
   detectUnusualSpending,
 } from '../services/financialAnalytics.service';
@@ -182,10 +184,9 @@ export const getExpenses = async (req: AuthRequest, res: Response, next: NextFun
     };
 
     if (from || to) {
-      const now = new Date();
       filter.date = {
-        ...(from ? { $gte: new Date(from as string) } : {}),
-        ...(to ? { $lte: new Date(to as string) } : {}),
+        ...(from ? { $gte: toUTCDayStart(new Date(from as string)) } : {}),
+        ...(to ? { $lte: toUTCDayEnd(new Date(to as string)) } : {}),
       };
     }
     if (categoryId) filter.categoryId = new Types.ObjectId(categoryId as string);
@@ -313,8 +314,8 @@ export const getIncomes = async (req: AuthRequest, res: Response, next: NextFunc
     const filter: Record<string, unknown> = { userId, deletedAt: { $exists: false } };
     if (from || to) {
       filter.date = {
-        ...(from ? { $gte: new Date(from as string) } : {}),
-        ...(to ? { $lte: new Date(to as string) } : {}),
+        ...(from ? { $gte: toUTCDayStart(new Date(from as string)) } : {}),
+        ...(to ? { $lte: toUTCDayEnd(new Date(to as string)) } : {}),
       };
     }
     if (categoryId) filter.categoryId = new Types.ObjectId(categoryId as string);
@@ -402,11 +403,11 @@ export const getBudget = async (req: AuthRequest, res: Response, next: NextFunct
 export const upsertBudget = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
     const userId = new Types.ObjectId(req.userId!);
-    const { year, month, overall, categoryBudgets } = req.body;
+    const { year, month, overall, categoryBudgets, carryForward } = req.body;
 
     const budget = await Budget.findOneAndUpdate(
       { userId, year, month },
-      { $set: { overall, categoryBudgets } },
+      { $set: { overall, categoryBudgets, carryForward: Boolean(carryForward) } },
       { new: true, upsert: true, runValidators: true }
     );
     const status = await getBudgetStatus(userId, year, month);

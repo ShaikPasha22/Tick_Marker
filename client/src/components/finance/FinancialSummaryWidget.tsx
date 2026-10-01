@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Wallet, TrendingDown, TrendingUp, ChevronRight, AlertTriangle } from 'lucide-react';
-import { financeDashboardApi } from '../../api/finance';
+import { financeDashboardApi, financeSettingsApi } from '../../api/finance';
 import { format, startOfMonth } from 'date-fns';
 import { useCurrency } from '../../store/financeStore';
 
@@ -17,6 +17,14 @@ export default function FinancialSummaryWidget() {
     queryFn: () => financeDashboardApi.get({ from, to }),
     staleTime: 2 * 60 * 1000,
   });
+
+  // Same query as AppShell, so this is served from cache
+  const { data: settings } = useQuery({
+    queryKey: ['finance-settings'],
+    queryFn: financeSettingsApi.get,
+    staleTime: 5 * 60 * 1000,
+  });
+  const lowBalanceThreshold = settings?.lowBalanceThreshold ?? 0;
 
   if (isLoading) {
     return (
@@ -63,7 +71,7 @@ export default function FinancialSummaryWidget() {
       </div>
 
       {/* Low balance alert */}
-      {balance.availableBalance < 10000 && balance.availableBalance >= 0 && (
+      {balance.availableBalance < lowBalanceThreshold && balance.availableBalance >= 0 && (
         <div className="flex items-center gap-2 p-2.5 rounded-xl bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800 mb-3">
           <AlertTriangle size={13} className="text-amber-500 shrink-0" />
           <p className="text-xs text-amber-700 dark:text-amber-400">

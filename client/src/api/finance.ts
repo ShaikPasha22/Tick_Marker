@@ -1,3 +1,4 @@
+import type { QueryClient } from '@tanstack/react-query';
 import api from './axios';
 import type {
   FinancialDashboard, FinancialSettings, Expense, Income, Budget,
@@ -12,6 +13,15 @@ const fmt = (params: Record<string, string | number | undefined>) =>
       .filter(([, v]) => v !== undefined)
       .map(([k, v]) => [k, String(v)])
   ).toString();
+
+/**
+ * Refresh every finance view (overview, calendar, transactions, analytics, budget)
+ * after a transaction changes, so each month shows the right entries and totals.
+ */
+export const invalidateFinanceQueries = (queryClient: QueryClient) =>
+  queryClient.invalidateQueries({
+    predicate: (q) => typeof q.queryKey[0] === 'string' && q.queryKey[0].startsWith('finance'),
+  });
 
 // ─── Settings ─────────────────────────────────────────────────────────────────
 
@@ -128,7 +138,7 @@ export const budgetApi = {
       .get<{ budget: Budget | null; status: BudgetStatus | null }>(`/finance/budget?${fmt(params ?? {})}`)
       .then((r) => r.data),
 
-  upsert: (data: { year: number; month: number; overall: number; categoryBudgets: any[] }) =>
+  upsert: (data: { year: number; month: number; overall: number; categoryBudgets: any[]; carryForward: boolean }) =>
     api.put<{ budget: Budget; status: BudgetStatus | null }>('/finance/budget', data).then((r) => r.data),
 };
 

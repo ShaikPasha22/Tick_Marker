@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
-import { format, getDaysInMonth, startOfMonth, getDay, addMonths, subMonths } from 'date-fns';
+import { format, getDaysInMonth, startOfMonth, getDay } from 'date-fns';
 import { ChevronLeft, ChevronRight, X, Plus, TrendingDown, TrendingUp } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { financeCalendarApi, expensesApi, incomeApi } from '../../api/finance';
-import { useCurrency } from '../../store/financeStore';
+import { financeCalendarApi, expensesApi, incomeApi, invalidateFinanceQueries } from '../../api/finance';
+import { useCurrency, useFinanceStore } from '../../store/financeStore';
 import FinanceSubNav from '../../components/finance/FinanceSubNav';
 import TransactionCard from '../../components/finance/TransactionCard';
 import AddExpenseModal from '../../components/finance/AddExpenseModal';
@@ -73,7 +73,6 @@ function DayCell({
 }
 
 export default function CalendarPage() {
-  const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [showAddExpense, setShowAddExpense] = useState(false);
   const [editExpense, setEditExpense] = useState<Expense | null>(null);
@@ -81,8 +80,8 @@ export default function CalendarPage() {
   const { fmt } = useCurrency();
   const queryClient = useQueryClient();
 
-  const year = currentDate.getFullYear();
-  const month = currentDate.getMonth() + 1;
+  const { selectedYear: year, selectedMonth: month, shiftSelectedMonth } = useFinanceStore();
+  const currentDate = new Date(year, month - 1, 1);
 
   const { data, isLoading } = useQuery({
     queryKey: ['finance-calendar', year, month],
@@ -105,9 +104,7 @@ export default function CalendarPage() {
   const deleteExpenseMutation = useMutation({
     mutationFn: expensesApi.delete,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['finance-calendar'] });
-      queryClient.invalidateQueries({ queryKey: ['finance-dashboard'] });
-      queryClient.invalidateQueries({ queryKey: ['finance-transactions'] });
+      invalidateFinanceQueries(queryClient);
       toast.success('Expense deleted');
     },
   });
@@ -134,7 +131,7 @@ export default function CalendarPage() {
       <div className="card p-4">
         <div className="flex items-center justify-between mb-4">
           <button
-            onClick={() => setCurrentDate(subMonths(currentDate, 1))}
+            onClick={() => { shiftSelectedMonth(-1); setSelectedDate(null); }}
             className="p-2 rounded-xl hover:bg-surface-100 dark:hover:bg-surface-800 transition-colors"
             id="calendar-prev-month"
           >
@@ -154,7 +151,7 @@ export default function CalendarPage() {
             </div>
           </div>
           <button
-            onClick={() => setCurrentDate(addMonths(currentDate, 1))}
+            onClick={() => { shiftSelectedMonth(1); setSelectedDate(null); }}
             className="p-2 rounded-xl hover:bg-surface-100 dark:hover:bg-surface-800 transition-colors"
             id="calendar-next-month"
           >

@@ -5,7 +5,7 @@ import { useForm } from 'react-hook-form';
 import { X, AlertTriangle, Plus, Check } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
-import { expensesApi, expenseCategoriesApi, paymentMethodsApi } from '../../api/finance';
+import { expensesApi, expenseCategoriesApi, paymentMethodsApi, invalidateFinanceQueries } from '../../api/finance';
 import type { ExpenseCategory, PaymentMethod, Expense } from '../../types';
 import { useCurrency } from '../../store/financeStore';
 
@@ -123,11 +123,7 @@ export default function AddExpenseModal({ onClose, expense, prefilledDate }: Add
         ? expensesApi.update(expense._id, data).then((exp) => ({ expense: exp, unusualWarning: null }))
         : expensesApi.create(data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['finance'] });
-      queryClient.invalidateQueries({ queryKey: ['finance-dashboard'] });
-      queryClient.invalidateQueries({ queryKey: ['finance-calendar'] });
-      queryClient.invalidateQueries({ queryKey: ['finance-transactions'] });
-      queryClient.invalidateQueries({ queryKey: ['finance-summary'] });
+      invalidateFinanceQueries(queryClient);
     },
   });
 

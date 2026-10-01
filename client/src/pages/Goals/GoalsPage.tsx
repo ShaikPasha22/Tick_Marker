@@ -950,7 +950,7 @@ function GoalOverviewView({
     defaultValues: {
       title: goal?.title ?? '',
       description: goal?.description ?? '',
-      targetValue: goal?.targetValue ?? 10,
+      targetValue: goal?.targetValue ?? '',
       currentValue: goal?.currentValue ?? 0,
       unit: goal?.unit ?? 'times',
       startDate: goal?.startDate ? goal.startDate.slice(0, 10) : new Date().toISOString().slice(0, 10),
@@ -1002,7 +1002,7 @@ function GoalOverviewView({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">Target</label>
-              <input {...register('targetValue')} type="number" id="goal-target" className="input" min={1} />
+              <input {...register('targetValue', { required: true })} type="number" id="goal-target" className="input" min={1} placeholder="e.g. 10" required />
             </div>
             <div>
               <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">Unit</label>

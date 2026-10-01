@@ -9,7 +9,7 @@
  */
 
 import { Types } from 'mongoose';
-import { startOfDay, endOfDay, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, subMonths, format, differenceInDays } from 'date-fns';
+import { format, differenceInDays } from 'date-fns';
 import { Expense } from '../models/Expense';
 import { Income } from '../models/Income';
 import { Budget } from '../models/Budget';
@@ -72,6 +72,7 @@ export interface BudgetStatusItem {
 export interface BudgetStatus {
   overall: {
     budgeted: number;
+    carriedForward: number;
     spent: number;
     remaining: number;
     percentage: number;
@@ -111,6 +112,8 @@ export interface FinancialDashboard {
   period: { from: Date; to: Date };
   summary: FinancialSummary;
   balance: AvailableBalance;
+  /** Balance just before the period starts and at its last day */
+  periodBalance: { startingBalance: number; endingBalance: number };
   budgetStatus: BudgetStatus | null;
   categoryBreakdown: CategoryBreakdownItem[];
   dailySpending: DailySpendingItem[];
@@ -124,16 +127,43 @@ export interface FinancialDashboard {
 
 // ─── Core Aggregation Helpers ─────────────────────────────────────────────────
 
-function toUTCDayStart(date: Date): Date {
+// Transaction dates are stored as UTC midnight of the calendar day the user picked
+// (the client sends "yyyy-MM-dd"), so every day/month boundary is computed in UTC,
+// never in the server's local timezone, which would shift entries across months.
+export function toUTCDayStart(date: Date): Date {
   const d = new Date(date);
   d.setUTCHours(0, 0, 0, 0);
   return d;
 }
 
-function toUTCDayEnd(date: Date): Date {
+export function toUTCDayEnd(date: Date): Date {
   const d = new Date(date);
   d.setUTCHours(23, 59, 59, 999);
   return d;
+}
+
+/** First and last instant (UTC) of a calendar month; month is 1-12. */
+export function utcMonthRange(year: number, month: number): { from: Date; to: Date } {
+  return {
+    from: new Date(Date.UTC(year, month - 1, 1)),
+    to: new Date(Date.UTC(year, month, 0, 23, 59, 59, 999)),
+  };
+}
+
+/** Year/month (1-12) of the month `offset` months away from the given one. */
+function shiftUTCMonth(year: number, month: number, offset: number): { year: number; month: number } {
+  const d = new Date(Date.UTC(year, month - 1 + offset, 1));
+  return { year: d.getUTCFullYear(), month: d.getUTCMonth() + 1 };
+}
+
+/** "yyyy-MM-dd" keys for every UTC day in [from, to]. */
+function utcDayKeys(from: Date, to: Date): string[] {
+  const keys: string[] = [];
+  const end = toUTCDayStart(to).getTime();
+  for (let t = toUTCDayStart(from).getTime(); t <= end; t += 24 * 60 * 60 * 1000) {
+    keys.push(new Date(t).toISOString().slice(0, 10));
+  }
+  return keys;
 }
 
 /**
@@ -191,13 +221,18 @@ export async function sumIncome(userId: Types.ObjectId, from: Date, to: Date): P
 
 // ─── Available Balance ────────────────────────────────────────────────────────
 
-export async function getAvailableBalance(userId: Types.ObjectId): Promise<AvailableBalance> {
+/**
+ * Opening balance plus confirmed income minus expenses: all time, or only
+ * transactions dated on/before `asOf` when given.
+ */
+export async function getAvailableBalance(userId: Types.ObjectId, asOf?: Date): Promise<AvailableBalance> {
   const settings = await FinancialSettings.findOne({ userId });
   const openingBalance = settings?.openingBalance ?? 0;
+  const dateFilter = asOf ? { date: { $lte: toUTCDayEnd(asOf) } } : {};
 
   // All-time confirmed income
   const incomeResult = await Income.aggregate([
-    { $match: { userId, status: 'confirmed', deletedAt: { $exists: false } } },
+    { $match: { userId, status: 'confirmed', deletedAt: { $exists: false }, ...dateFilter } },
     { $group: { _id: null, total: { $sum: '$amount' } } },
   ]);
   const totalConfirmedIncome = incomeResult[0]?.total ?? 0;
@@ -205,13 +240,13 @@ export async function getAvailableBalance(userId: Types.ObjectId): Promise<Avail
   // All-time confirmed expenses (net of refunds)
   const expenseResult = await Expense.aggregate([
     {
-      $match: { userId, status: 'confirmed', isRefund: false, deletedAt: { $exists: false } },
+      $match: { userId, status: 'confirmed', isRefund: false, deletedAt: { $exists: false }, ...dateFilter },
     },
     { $group: { _id: null, total: { $sum: '$amount' } } },
   ]);
   const refundResult = await Expense.aggregate([
     {
-      $match: { userId, status: 'confirmed', isRefund: true, deletedAt: { $exists: false } },
+      $match: { userId, status: 'confirmed', isRefund: true, deletedAt: { $exists: false }, ...dateFilter },
     },
     { $group: { _id: null, total: { $sum: '$amount' } } },
   ]);
@@ -303,8 +338,6 @@ export async function getDailySpending(
   from: Date,
   to: Date
 ): Promise<DailySpendingItem[]> {
-  const days = eachDayOfInterval({ start: from, end: to });
-
   const [expenses, incomes] = await Promise.all([
     Expense.aggregate([
       {
@@ -345,8 +378,7 @@ export async function getDailySpending(
   const expenseMap = new Map(expenses.map((e) => [e._id, { amount: e.amount, count: e.count }]));
   const incomeMap = new Map(incomes.map((i) => [i._id, i.amount]));
 
-  return days.map((day) => {
-    const key = format(day, 'yyyy-MM-dd');
+  return utcDayKeys(from, to).map((key) => {
     const exp = expenseMap.get(key) ?? { amount: 0, count: 0 };
     return {
       date: key,
@@ -367,9 +399,8 @@ export async function getMonthlyData(
   const result: MonthlyDataItem[] = [];
 
   for (let i = months - 1; i >= 0; i--) {
-    const monthDate = subMonths(now, i);
-    const from = startOfMonth(monthDate);
-    const to = endOfMonth(monthDate);
+    const { year, month } = shiftUTCMonth(now.getUTCFullYear(), now.getUTCMonth() + 1, -i);
+    const { from, to } = utcMonthRange(year, month);
 
     const [income, expenses] = await Promise.all([
       sumIncome(userId, from, to),
@@ -377,9 +408,9 @@ export async function getMonthlyData(
     ]);
 
     result.push({
-      year: monthDate.getFullYear(),
-      month: monthDate.getMonth() + 1,
-      label: format(monthDate, 'MMM yyyy'),
+      year,
+      month,
+      label: format(new Date(year, month - 1, 1), 'MMM yyyy'),
       income,
       expenses,
       netCashFlow: income - expenses,
@@ -391,26 +422,44 @@ export async function getMonthlyData(
 
 // ─── Budget Status ────────────────────────────────────────────────────────────
 
+/**
+ * Unspent budget brought into `year/month` from the previous month, when that month's
+ * budget has "carry forward" switched on. Chains back while consecutive months keep it on.
+ */
+async function getCarriedForwardAmount(userId: Types.ObjectId, year: number, month: number): Promise<number> {
+  const previous = shiftUTCMonth(year, month, -1);
+  const previousBudget = await Budget.findOne({ userId, year: previous.year, month: previous.month });
+  if (!previousBudget?.carryForward) return 0;
+
+  const { from, to } = utcMonthRange(previous.year, previous.month);
+  const [previousCarry, previousSpent] = await Promise.all([
+    getCarriedForwardAmount(userId, previous.year, previous.month),
+    sumExpenses(userId, from, to),
+  ]);
+  return Math.max(0, previousBudget.overall + previousCarry - previousSpent);
+}
+
 export async function getBudgetStatus(
   userId: Types.ObjectId,
   year: number,
   month: number
 ): Promise<BudgetStatus | null> {
   const budget = await Budget.findOne({ userId, year, month });
-  if (!budget || (budget.overall === 0 && budget.categoryBudgets.length === 0)) {
-    return null;
-  }
+  const { from, to } = utcMonthRange(year, month);
 
-  const from = new Date(year, month - 1, 1);
-  const to = endOfMonth(from);
+  const carriedForward = await getCarriedForwardAmount(userId, year, month);
+  const hasOwnBudget = !!budget && (budget.overall > 0 || budget.categoryBudgets.length > 0);
+  if (!hasOwnBudget && carriedForward === 0) return null;
 
   // Overall budget status
   const totalSpent = await sumExpenses(userId, from, to);
-  const overallRemaining = Math.max(0, budget.overall - totalSpent);
-  const overallPercentage = budget.overall > 0 ? Math.round((totalSpent / budget.overall) * 100) : 0;
+  const effectiveBudget = (budget?.overall ?? 0) + carriedForward;
+  const overallRemaining = Math.max(0, effectiveBudget - totalSpent);
+  const overallPercentage = effectiveBudget > 0 ? Math.round((totalSpent / effectiveBudget) * 100) : 0;
 
   // Per-category budget status
-  const categoryIds = budget.categoryBudgets.map((cb) => cb.categoryId);
+  const categoryBudgets = budget?.categoryBudgets ?? [];
+  const categoryIds = categoryBudgets.map((cb) => cb.categoryId);
   const categories = await ExpenseCategory.find({ _id: { $in: categoryIds } }).lean();
   const categoryMap = new Map(categories.map((c) => [c._id.toString(), c]));
 
@@ -430,7 +479,7 @@ export async function getBudgetStatus(
 
   const spentMap = new Map(categoryExpenses.map((e) => [e._id.toString(), e.spent]));
 
-  const categoryStatuses: BudgetStatusItem[] = budget.categoryBudgets.map((cb) => {
+  const categoryStatuses: BudgetStatusItem[] = categoryBudgets.map((cb) => {
     const cat = categoryMap.get(cb.categoryId.toString());
     const spent = spentMap.get(cb.categoryId.toString()) ?? 0;
     const remaining = Math.max(0, cb.amount - spent);
@@ -451,7 +500,8 @@ export async function getBudgetStatus(
 
   return {
     overall: {
-      budgeted: budget.overall,
+      budgeted: effectiveBudget,
+      carriedForward,
       spent: totalSpent,
       remaining: overallRemaining,
       percentage: overallPercentage,
@@ -515,18 +565,20 @@ export async function getSpendingVelocity(
   year: number,
   month: number
 ): Promise<SpendingVelocity | null> {
-  const budget = await Budget.findOne({ userId, year, month });
-  if (!budget || budget.overall === 0) return null;
+  const budgetStatus = await getBudgetStatus(userId, year, month);
+  if (!budgetStatus || budgetStatus.overall.budgeted === 0) return null;
 
   const now = new Date();
-  const monthStart = new Date(year, month - 1, 1);
-  const monthEnd = endOfMonth(monthStart);
-  const totalDaysInMonth = differenceInDays(monthEnd, monthStart) + 1;
-  const daysElapsed = Math.min(differenceInDays(now, monthStart) + 1, totalDaysInMonth);
+  const { from: monthStart, to: monthEnd } = utcMonthRange(year, month);
+  const totalDaysInMonth = monthEnd.getUTCDate();
+  const daysElapsed = Math.max(0, Math.min(differenceInDays(now, monthStart) + 1, totalDaysInMonth));
   const percentMonthElapsed = Math.round((daysElapsed / totalDaysInMonth) * 100);
 
-  const spentAmount = await sumExpenses(userId, monthStart, now);
-  const percentBudgetUsed = budget.overall > 0 ? Math.round((spentAmount / budget.overall) * 100) : 0;
+  const spentThrough = now < monthEnd ? now : monthEnd;
+  const spentAmount = daysElapsed > 0 ? await sumExpenses(userId, monthStart, spentThrough) : 0;
+  const percentBudgetUsed = budgetStatus.overall.budgeted > 0
+    ? Math.round((spentAmount / budgetStatus.overall.budgeted) * 100)
+    : 0;
 
   const dailyAvg = daysElapsed > 0 ? spentAmount / daysElapsed : 0;
   const projectedMonthlySpend = Math.round(dailyAvg * totalDaysInMonth);
@@ -535,7 +587,7 @@ export async function getSpendingVelocity(
     daysElapsed,
     totalDaysInMonth,
     percentMonthElapsed,
-    budgetedAmount: budget.overall,
+    budgetedAmount: budgetStatus.overall.budgeted,
     spentAmount,
     percentBudgetUsed,
     isOverPace: percentBudgetUsed > percentMonthElapsed,
@@ -546,13 +598,19 @@ export async function getSpendingVelocity(
 // ─── Insights ─────────────────────────────────────────────────────────────────
 
 export async function generateFinancialInsights(
-  userId: Types.ObjectId
+  userId: Types.ObjectId,
+  periodFrom?: Date,
+  periodTo?: Date
 ): Promise<FinancialInsight[]> {
   const insights: FinancialInsight[] = [];
   const now = new Date();
-  const thisMonthStart = startOfMonth(now);
-  const lastMonthStart = startOfMonth(subMonths(now, 1));
-  const lastMonthEnd = endOfMonth(subMonths(now, 1));
+  const periodStart = periodFrom ?? now;
+  const periodYear = periodStart.getUTCFullYear();
+  const periodMonth = periodStart.getUTCMonth() + 1;
+  const thisMonthStart = utcMonthRange(periodYear, periodMonth).from;
+  const thisMonthEnd = periodTo && periodTo < now ? periodTo : now;
+  const previous = shiftUTCMonth(periodYear, periodMonth, -1);
+  const { from: lastMonthStart, to: lastMonthEnd } = utcMonthRange(previous.year, previous.month);
 
   // Check if there's enough data
   const expenseCount = await Expense.countDocuments({
@@ -574,15 +632,19 @@ export async function generateFinancialInsights(
 
   const [thisMonthExpenses, lastMonthExpenses, thisMonthIncome, balance, categories] =
     await Promise.all([
-      sumExpenses(userId, thisMonthStart, now),
+      sumExpenses(userId, thisMonthStart, thisMonthEnd),
       sumExpenses(userId, lastMonthStart, lastMonthEnd),
-      sumIncome(userId, thisMonthStart, now),
+      sumIncome(userId, thisMonthStart, thisMonthEnd),
       getAvailableBalance(userId),
-      getCategoryBreakdown(userId, thisMonthStart, now),
+      getCategoryBreakdown(userId, thisMonthStart, thisMonthEnd),
     ]);
 
   const settings = await FinancialSettings.findOne({ userId });
-  const budget = await Budget.findOne({ userId, year: now.getFullYear(), month: now.getMonth() + 1 });
+  const budget = await Budget.findOne({
+    userId,
+    year: periodYear,
+    month: periodMonth,
+  });
   const currencySymbol = settings?.currencySymbol ?? '₹';
   const fmt = (n: number) => `${currencySymbol}${n.toLocaleString('en-IN')}`;
 
@@ -624,7 +686,7 @@ export async function generateFinancialInsights(
   }
 
   // Low balance alert
-  const threshold = settings?.lowBalanceThreshold ?? 10000;
+  const threshold = settings?.lowBalanceThreshold ?? 0;
   if (balance.availableBalance < threshold && balance.availableBalance >= 0) {
     insights.push({
       id: 'low-balance',
@@ -636,14 +698,16 @@ export async function generateFinancialInsights(
   }
 
   // Budget usage
-  if (budget && budget.overall > 0) {
-    const pct = Math.round((thisMonthExpenses / budget.overall) * 100);
+  const monthBudgetStatus = await getBudgetStatus(userId, periodYear, periodMonth);
+  if (budget && monthBudgetStatus && monthBudgetStatus.overall.budgeted > 0) {
+    const effectiveBudget = monthBudgetStatus.overall.budgeted;
+    const pct = Math.round((thisMonthExpenses / effectiveBudget) * 100);
     if (pct >= 90 && pct < 100) {
       insights.push({
         id: 'budget-near-limit',
         type: 'warning',
         title: 'Approaching Budget Limit',
-        message: `You've used ${pct}% of your monthly budget. Only ${fmt(budget.overall - thisMonthExpenses)} remaining.`,
+        message: `You've used ${pct}% of your monthly budget. Only ${fmt(effectiveBudget - thisMonthExpenses)} remaining.`,
         icon: '🔴',
       });
     } else if (pct >= 100) {
@@ -651,7 +715,7 @@ export async function generateFinancialInsights(
         id: 'budget-exceeded',
         type: 'alert',
         title: 'Budget Exceeded',
-        message: `Your spending has exceeded your monthly budget by ${fmt(thisMonthExpenses - budget.overall)}.`,
+        message: `Your spending has exceeded your monthly budget by ${fmt(thisMonthExpenses - effectiveBudget)}.`,
         icon: '🚨',
       });
     }
@@ -690,30 +754,41 @@ export async function getFinancialDashboard(
   to: Date
 ): Promise<FinancialDashboard> {
   const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth() + 1;
+  const year = from.getUTCFullYear();
+  const month = from.getUTCMonth() + 1;
+  const dayBeforePeriod = new Date(toUTCDayStart(from).getTime() - 1);
 
-  const [summary, balance, categoryBreakdown, dailySpending, budgetStatus, insights, velocity, settings] =
+  const [summary, balance, startingBalance, endingBalance, categoryBreakdown, dailySpending, budgetStatus, insights, velocity, settings] =
     await Promise.all([
       getFinancialSummary(userId, from, to),
       getAvailableBalance(userId),
+      getAvailableBalance(userId, dayBeforePeriod),
+      getAvailableBalance(userId, to),
       getCategoryBreakdown(userId, from, to),
       getDailySpending(userId, from, to),
       getBudgetStatus(userId, year, month),
-      generateFinancialInsights(userId),
+      generateFinancialInsights(userId, from, to),
       getSpendingVelocity(userId, year, month),
       FinancialSettings.findOne({ userId }),
     ]);
 
   // Recent transactions (expenses + income combined)
   const [recentExpenses, recentIncomes] = await Promise.all([
-    Expense.find({ userId, deletedAt: { $exists: false } })
+    Expense.find({
+      userId,
+      deletedAt: { $exists: false },
+      date: { $gte: toUTCDayStart(from), $lte: toUTCDayEnd(to) },
+    })
       .sort({ date: -1, createdAt: -1 })
       .limit(10)
       .populate('categoryId', 'name icon color')
       .populate('paymentMethodId', 'name icon')
       .lean(),
-    Income.find({ userId, deletedAt: { $exists: false } })
+    Income.find({
+      userId,
+      deletedAt: { $exists: false },
+      date: { $gte: toUTCDayStart(from), $lte: toUTCDayEnd(to) },
+    })
       .sort({ date: -1, createdAt: -1 })
       .limit(5)
       .populate('categoryId', 'name icon color')
@@ -728,7 +803,8 @@ export async function getFinancialDashboard(
     .slice(0, 10);
 
   // Average daily spending
-  const days = Math.max(1, differenceInDays(to, from) + 1);
+  const effectiveTo = to < now ? to : now;
+  const days = Math.max(1, differenceInDays(effectiveTo, from) + 1);
   const averageDailySpending = Math.round(summary.totalExpenses / days);
   const topCategory = categoryBreakdown.length > 0 ? categoryBreakdown[0] : null;
 
@@ -736,6 +812,10 @@ export async function getFinancialDashboard(
     period: { from, to },
     summary,
     balance,
+    periodBalance: {
+      startingBalance: startingBalance.availableBalance,
+      endingBalance: endingBalance.availableBalance,
+    },
     budgetStatus,
     categoryBreakdown,
     dailySpending,
@@ -755,8 +835,7 @@ export async function getCalendarData(
   year: number,
   month: number
 ): Promise<{ date: string; expenseAmount: number; incomeAmount: number; transactionCount: number }[]> {
-  const from = new Date(year, month - 1, 1);
-  const to = endOfMonth(from);
+  const { from, to } = utcMonthRange(year, month);
 
   const [expenses, incomes] = await Promise.all([
     Expense.aggregate([
@@ -798,9 +877,7 @@ export async function getCalendarData(
   const expenseMap = new Map(expenses.map((e) => [e._id, { amount: e.amount, count: e.count }]));
   const incomeMap = new Map(incomes.map((i) => [i._id, i.amount]));
 
-  const days = eachDayOfInterval({ start: from, end: to });
-  return days.map((day) => {
-    const key = format(day, 'yyyy-MM-dd');
+  return utcDayKeys(from, to).map((key) => {
     const exp = expenseMap.get(key) ?? { amount: 0, count: 0 };
     return {
       date: key,

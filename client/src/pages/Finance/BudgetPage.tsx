@@ -3,19 +3,20 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { PiggyBank, Save, ChevronDown, ChevronUp, AlertCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { budgetApi, expenseCategoriesApi } from '../../api/finance';
-import { useCurrency } from '../../store/financeStore';
+import { budgetApi, expenseCategoriesApi, invalidateFinanceQueries } from '../../api/finance';
+import { useCurrency, useFinanceStore } from '../../store/financeStore';
 import FinanceSubNav from '../../components/finance/FinanceSubNav';
+import MonthSelector from '../../components/finance/MonthSelector';
 import BudgetProgressBar from '../../components/finance/BudgetProgressBar';
 
 export default function BudgetPage() {
   const { fmt } = useCurrency();
   const queryClient = useQueryClient();
-  const now = new Date();
-  const [year, setYear] = useState(now.getFullYear());
-  const [month, setMonth] = useState(now.getMonth() + 1);
+  const year = useFinanceStore((s) => s.selectedYear);
+  const month = useFinanceStore((s) => s.selectedMonth);
   const [overallBudget, setOverallBudget] = useState('');
   const [categoryBudgets, setCategoryBudgets] = useState<Record<string, string>>({});
+  const [carryForward, setCarryForward] = useState(false);
   const [showAll, setShowAll] = useState(false);
 
   const { data: budgetData, isLoading } = useQuery({
@@ -31,10 +32,11 @@ export default function BudgetPage() {
 
   // Sync form with loaded budget
   useEffect(() => {
-    if (budgetData?.budget) {
-      setOverallBudget(String(budgetData.budget.overall || ''));
+    if (budgetData) {
+      setOverallBudget(String(budgetData.budget?.overall || ''));
+      setCarryForward(budgetData.budget?.carryForward ?? false);
       const cbMap: Record<string, string> = {};
-      budgetData.budget.categoryBudgets?.forEach((cb) => {
+      budgetData.budget?.categoryBudgets?.forEach((cb) => {
         cbMap[cb.categoryId] = String(cb.amount);
       });
       setCategoryBudgets(cbMap);
@@ -44,8 +46,7 @@ export default function BudgetPage() {
   const upsertMutation = useMutation({
     mutationFn: (data: any) => budgetApi.upsert(data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['finance-budget'] });
-      queryClient.invalidateQueries({ queryKey: ['finance-dashboard'] });
+      invalidateFinanceQueries(queryClient);
       toast.success('Budget saved!');
     },
     onError: () => toast.error('Failed to save budget'),
@@ -59,7 +60,7 @@ export default function BudgetPage() {
     const sumCategoryBudgets = categoryBudgetsPayload.reduce((s, cb) => s + cb.amount, 0);
     const overall = parseFloat(overallBudget) || sumCategoryBudgets;
 
-    upsertMutation.mutate({ year, month, overall, categoryBudgets: categoryBudgetsPayload });
+    upsertMutation.mutate({ year, month, overall, categoryBudgets: categoryBudgetsPayload, carryForward });
   };
 
   const status = budgetData?.status;
@@ -70,6 +71,7 @@ export default function BudgetPage() {
   const unallocated = Math.max(0, budgetTotal - totalCatBudget);
 
   const monthName = new Date(year, month - 1).toLocaleString('default', { month: 'long' });
+  const nextMonthName = new Date(year, month).toLocaleString('default', { month: 'long' });
 
   const displayedCategories = showAll ? categories : categories.slice(0, 8);
 
@@ -77,37 +79,13 @@ export default function BudgetPage() {
     <div className="space-y-5">
       <FinanceSubNav />
 
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <PiggyBank size={20} className="text-purple-500" />
           <h2 className="text-xl font-bold text-surface-900 dark:text-surface-50">Budget</h2>
         </div>
 
-        {/* Month selector */}
-        <div className="flex items-center gap-2">
-          <select
-            value={month}
-            onChange={(e) => setMonth(parseInt(e.target.value))}
-            className="input py-1.5 text-xs w-28"
-            id="budget-month-select"
-          >
-            {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
-              <option key={m} value={m}>
-                {new Date(year, m - 1).toLocaleString('default', { month: 'long' })}
-              </option>
-            ))}
-          </select>
-          <select
-            value={year}
-            onChange={(e) => setYear(parseInt(e.target.value))}
-            className="input py-1.5 text-xs w-20"
-            id="budget-year-select"
-          >
-            {[now.getFullYear() - 1, now.getFullYear(), now.getFullYear() + 1].map((y) => (
-              <option key={y} value={y}>{y}</option>
-            ))}
-          </select>
-        </div>
+        <MonthSelector />
       </div>
 
       {/* Current status */}
@@ -138,6 +116,11 @@ export default function BudgetPage() {
               <span>Remaining: {fmt(status.overall.remaining)}</span>
               <span>Budget: {fmt(status.overall.budgeted)}</span>
             </div>
+            {status.overall.carriedForward > 0 && (
+              <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-2">
+                Includes {fmt(status.overall.carriedForward)} carried forward from the previous month.
+              </p>
+            )}
           </div>
 
           {/* Category status */}
@@ -188,6 +171,27 @@ export default function BudgetPage() {
             </div>
           )}
         </div>
+
+        <label className="flex items-start gap-3 rounded-lg border border-custom p-3 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={carryForward}
+            onChange={(e) => setCarryForward(e.target.checked)}
+            id="budget-carry-forward"
+            className="mt-0.5 accent-emerald-600"
+          />
+          <span>
+            <span className="block text-sm font-semibold text-surface-800 dark:text-surface-200">
+              Carry {monthName}’s remaining budget into {nextMonthName}
+            </span>
+            <span className="block text-xs text-surface-500 mt-0.5">
+              Whatever is left of {monthName}’s overall budget is added to {nextMonthName}’s budget.
+              {carryForward && status && status.overall.remaining > 0 && (
+                <> Currently {fmt(status.overall.remaining)} would carry over.</>
+              )}
+            </span>
+          </span>
+        </label>
 
         {/* Category budgets */}
         <div>

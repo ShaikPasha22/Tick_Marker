@@ -8,8 +8,12 @@ export const connectDB = async (): Promise<void> => {
     const conn = await mongoose.connect(env.MONGO_URI);
     console.log(`✅ MongoDB connected: ${conn.connection.host}`);
   } catch (error) {
-    if (env.NODE_ENV === 'production') {
-      console.error('❌ MongoDB connection failed in production mode:', error);
+    // The in-memory fallback is wiped on every restart and auto-seeded with demo data,
+    // so it must never be used on a deployed server — fail loudly instead of silently
+    // losing users' data. Render sets RENDER=true on every service.
+    const isDeployed = env.NODE_ENV === 'production' || Boolean(process.env.RENDER);
+    if (isDeployed) {
+      console.error('❌ MongoDB connection failed on a deployed server (refusing in-memory fallback):', error);
       process.exit(1);
     }
 

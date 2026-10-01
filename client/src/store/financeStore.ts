@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { format, startOfMonth } from 'date-fns';
+import { format, startOfMonth, endOfMonth } from 'date-fns';
 
 
 export type PeriodType = 'day' | 'week' | 'month' | 'year' | 'custom';
@@ -19,6 +19,12 @@ export interface TransactionFilter {
 }
 
 interface FinanceState {
+  // Month shown across the finance pages (month is 1-12)
+  selectedYear: number;
+  selectedMonth: number;
+  setSelectedMonth: (year: number, month: number) => void;
+  shiftSelectedMonth: (delta: number) => void;
+
   // Period selection
   periodType: PeriodType;
   dateRange: DateRange;
@@ -40,6 +46,9 @@ interface FinanceState {
   // Currency symbol (cached from settings)
   currencySymbol: string;
   setCurrencySymbol: (symbol: string) => void;
+
+  // Reset per-user state when the signed-in account changes
+  resetForNewSession: () => void;
 }
 
 function getDefaultRange(type: PeriodType): DateRange {
@@ -72,9 +81,33 @@ function getDefaultRange(type: PeriodType): DateRange {
   }
 }
 
+/** "yyyy-MM-dd" bounds of a calendar month (month is 1-12) */
+export function getMonthRange(year: number, month: number): DateRange {
+  const first = new Date(year, month - 1, 1);
+  return { from: format(first, 'yyyy-MM-dd'), to: format(endOfMonth(first), 'yyyy-MM-dd') };
+}
+
+/** Default date for a new entry: today if it falls in the month, else the 1st of that month */
+export function getDefaultEntryDate(year: number, month: number): string {
+  const now = new Date();
+  if (now.getFullYear() === year && now.getMonth() + 1 === month) return format(now, 'yyyy-MM-dd');
+  return format(new Date(year, month - 1, 1), 'yyyy-MM-dd');
+}
+
+const currentMonth = () => ({ selectedYear: new Date().getFullYear(), selectedMonth: new Date().getMonth() + 1 });
+
 export const useFinanceStore = create<FinanceState>()(
   persist(
     (set) => ({
+      ...currentMonth(),
+
+      setSelectedMonth: (year, month) => set({ selectedYear: year, selectedMonth: month }),
+
+      shiftSelectedMonth: (delta) =>
+        set((s) => {
+          const d = new Date(s.selectedYear, s.selectedMonth - 1 + delta, 1);
+          return { selectedYear: d.getFullYear(), selectedMonth: d.getMonth() + 1 };
+        }),
 
       periodType: 'month',
       dateRange: getDefaultRange('month'),
@@ -103,6 +136,17 @@ export const useFinanceStore = create<FinanceState>()(
       setShowAddIncome: (v) => set({ showAddIncome: v }),
 
       setCurrencySymbol: (symbol) => set({ currencySymbol: symbol }),
+
+      resetForNewSession: () =>
+        set({
+          ...currentMonth(),
+          periodType: 'month',
+          dateRange: getDefaultRange('month'),
+          filter: { page: 1 },
+          showAddExpense: false,
+          showAddIncome: false,
+          currencySymbol: '₹',
+        }),
     }),
     {
       name: 'tickmark-finance',

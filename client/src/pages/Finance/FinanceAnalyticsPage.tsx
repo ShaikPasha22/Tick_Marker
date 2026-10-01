@@ -8,8 +8,9 @@ import {
 import { motion } from 'framer-motion';
 import { TrendingUp, TrendingDown, BarChart2 } from 'lucide-react';
 import { financeAnalyticsApi } from '../../api/finance';
-import { useCurrency } from '../../store/financeStore';
+import { useCurrency, useFinanceStore, getMonthRange } from '../../store/financeStore';
 import FinanceSubNav from '../../components/finance/FinanceSubNav';
+import MonthSelector from '../../components/finance/MonthSelector';
 
 type Period = 'week' | 'month' | '3months' | 'year' | 'custom';
 
@@ -34,6 +35,8 @@ export default function FinanceAnalyticsPage() {
   const [period, setPeriod] = useState<Period>('month');
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
+  const selectedYear = useFinanceStore((s) => s.selectedYear);
+  const selectedMonth = useFinanceStore((s) => s.selectedMonth);
 
   const now = new Date();
   const getRange = (): { from: string; to: string } => {
@@ -41,7 +44,7 @@ export default function FinanceAnalyticsPage() {
       case 'week':
         return { from: format(subDays(now, 7), 'yyyy-MM-dd'), to: format(now, 'yyyy-MM-dd') };
       case 'month':
-        return { from: format(startOfMonth(now), 'yyyy-MM-dd'), to: format(now, 'yyyy-MM-dd') };
+        return getMonthRange(selectedYear, selectedMonth);
       case '3months':
         return { from: format(subMonths(now, 3), 'yyyy-MM-dd'), to: format(now, 'yyyy-MM-dd') };
       case 'year':
@@ -87,9 +90,10 @@ export default function FinanceAnalyticsPage() {
   const totalIncome = summary?.summary?.totalIncome ?? 0;
   const netCashFlow = summary?.summary?.netCashFlow ?? 0;
 
-  // Monthly comparison
-  const thisMonth = monthly?.[monthly.length - 1];
-  const lastMonth = monthly?.[monthly.length - 2];
+  // Monthly comparison: the selected month vs the one before it
+  const monthIndex = monthly?.findIndex((m) => m.year === selectedYear && m.month === selectedMonth) ?? -1;
+  const thisMonth = monthIndex >= 0 ? monthly?.[monthIndex] : undefined;
+  const lastMonth = monthIndex > 0 ? monthly?.[monthIndex - 1] : undefined;
   const momChange = lastMonth && lastMonth.expenses > 0
     ? Math.round(((thisMonth?.expenses ?? 0) - lastMonth.expenses) / lastMonth.expenses * 100)
     : null;
@@ -106,7 +110,7 @@ export default function FinanceAnalyticsPage() {
       <div className="flex gap-1.5 flex-wrap">
         {([
           { key: 'week', label: '7 days' },
-          { key: 'month', label: 'This month' },
+          { key: 'month', label: 'Month' },
           { key: '3months', label: '3 months' },
           { key: 'year', label: 'This year' },
           { key: 'custom', label: 'Custom' },
@@ -125,6 +129,8 @@ export default function FinanceAnalyticsPage() {
           </button>
         ))}
       </div>
+
+      {period === 'month' && <MonthSelector id="analytics-month" />}
 
       {period === 'custom' && (
         <div className="grid grid-cols-2 gap-3">
@@ -244,7 +250,7 @@ export default function FinanceAnalyticsPage() {
             {momChange !== null && (
               <span className={`text-xs font-semibold flex items-center gap-0.5 ${momChange >= 0 ? 'text-red-500' : 'text-emerald-500'}`}>
                 {momChange >= 0 ? <TrendingUp size={10} /> : <TrendingDown size={10} />}
-                {Math.abs(momChange)}% vs last month
+                {Math.abs(momChange)}% vs previous month
               </span>
             )}
           </div>
@@ -263,10 +269,10 @@ export default function FinanceAnalyticsPage() {
           {/* Monthly comparison table */}
           {thisMonth && lastMonth && (
             <div className="mt-4 p-4 rounded-xl bg-surface-50 dark:bg-surface-800">
-              <h4 className="text-xs font-semibold text-surface-500 uppercase tracking-wide mb-3">This vs Last Month</h4>
+              <h4 className="text-xs font-semibold text-surface-500 uppercase tracking-wide mb-3">{thisMonth.label} vs {lastMonth.label}</h4>
               <div className="grid grid-cols-3 gap-3 text-center text-xs">
                 <div>
-                  <p className="text-surface-400 mb-1">Last Month</p>
+                  <p className="text-surface-400 mb-1">{lastMonth.label}</p>
                   <p className="font-bold text-surface-900 dark:text-surface-50">{fmt(lastMonth.expenses)}</p>
                 </div>
                 <div>
@@ -276,7 +282,7 @@ export default function FinanceAnalyticsPage() {
                   </p>
                 </div>
                 <div>
-                  <p className="text-surface-400 mb-1">This Month</p>
+                  <p className="text-surface-400 mb-1">{thisMonth.label}</p>
                   <p className="font-bold text-surface-900 dark:text-surface-50">{fmt(thisMonth.expenses)}</p>
                 </div>
               </div>

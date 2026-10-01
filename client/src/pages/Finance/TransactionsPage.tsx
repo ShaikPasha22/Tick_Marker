@@ -1,12 +1,14 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { format } from 'date-fns';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, Filter, X, Plus, Download, ChevronLeft, ChevronRight } from 'lucide-react';
 import toast from 'react-hot-toast';
 
-import { expensesApi, incomeApi, expenseCategoriesApi, financeExportApi } from '../../api/finance';
-import { useCurrency } from '../../store/financeStore';
+import { expensesApi, incomeApi, expenseCategoriesApi, financeExportApi, invalidateFinanceQueries } from '../../api/finance';
+import { useCurrency, useFinanceStore, getMonthRange, getDefaultEntryDate } from '../../store/financeStore';
 import FinanceSubNav from '../../components/finance/FinanceSubNav';
+import MonthSelector from '../../components/finance/MonthSelector';
 import TransactionCard from '../../components/finance/TransactionCard';
 import AddExpenseModal from '../../components/finance/AddExpenseModal';
 import AddIncomeModal from '../../components/finance/AddIncomeModal';
@@ -21,8 +23,9 @@ export default function TransactionsPage() {
   const [search, setSearch] = useState('');
   const [categoryId, setCategoryId] = useState('');
   const [status, setStatus] = useState('');
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
+  const year = useFinanceStore((s) => s.selectedYear);
+  const month = useFinanceStore((s) => s.selectedMonth);
+  const { from: dateFrom, to: dateTo } = getMonthRange(year, month);
   const [page, setPage] = useState(1);
   const [showFilters, setShowFilters] = useState(false);
   const [showAddExpense, setShowAddExpense] = useState(false);
@@ -32,12 +35,15 @@ export default function TransactionsPage() {
 
   const LIMIT = 25;
 
+  // Start from the first page whenever another month is picked
+  useEffect(() => setPage(1), [year, month]);
+
   const expenseParams = {
     search: search || undefined,
     categoryId: categoryId || undefined,
     status: status || undefined,
-    from: dateFrom || undefined,
-    to: dateTo || undefined,
+    from: dateFrom,
+    to: dateTo,
     page,
     limit: LIMIT,
   };
@@ -45,8 +51,8 @@ export default function TransactionsPage() {
   const incomeParams = {
     categoryId: categoryId || undefined,
     status: status || undefined,
-    from: dateFrom || undefined,
-    to: dateTo || undefined,
+    from: dateFrom,
+    to: dateTo,
     page,
     limit: LIMIT,
   };
@@ -72,8 +78,7 @@ export default function TransactionsPage() {
   const deleteExpense = useMutation({
     mutationFn: expensesApi.delete,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['finance-transactions'] });
-      queryClient.invalidateQueries({ queryKey: ['finance-dashboard'] });
+      invalidateFinanceQueries(queryClient);
       toast.success('Expense deleted');
     },
   });
@@ -81,19 +86,16 @@ export default function TransactionsPage() {
   const deleteIncome = useMutation({
     mutationFn: incomeApi.delete,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['finance-transactions'] });
-      queryClient.invalidateQueries({ queryKey: ['finance-dashboard'] });
+      invalidateFinanceQueries(queryClient);
       toast.success('Income deleted');
     },
   });
 
-  const hasFilters = search || categoryId || status || dateFrom || dateTo;
+  const hasFilters = search || categoryId || status;
   const clearFilters = () => {
     setSearch('');
     setCategoryId('');
     setStatus('');
-    setDateFrom('');
-    setDateTo('');
     setPage(1);
   };
 
@@ -109,9 +111,13 @@ export default function TransactionsPage() {
       <FinanceSubNav />
 
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold text-surface-900 dark:text-surface-50">Transactions</h2>
-        <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-bold text-surface-900 dark:text-surface-50">Transactions</h2>
+          <p className="text-sm text-surface-400">{format(new Date(year, month - 1, 1), 'MMMM yyyy')}</p>
+        </div>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <MonthSelector />
           <button
             onClick={() => financeExportApi.exportCSV()}
             className="btn-ghost text-xs"
@@ -194,27 +200,7 @@ export default function TransactionsPage() {
             exit={{ opacity: 0, height: 0 }}
             className="card p-4 overflow-hidden"
           >
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <div>
-                <label className="block text-xs font-semibold text-surface-500 mb-1">From</label>
-                <input
-                  type="date"
-                  value={dateFrom}
-                  onChange={(e) => { setDateFrom(e.target.value); setPage(1); }}
-                  id="filter-date-from"
-                  className="input py-2 text-sm"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-surface-500 mb-1">To</label>
-                <input
-                  type="date"
-                  value={dateTo}
-                  onChange={(e) => { setDateTo(e.target.value); setPage(1); }}
-                  id="filter-date-to"
-                  className="input py-2 text-sm"
-                />
-              </div>
+            <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-semibold text-surface-500 mb-1">Category</label>
                 <select
@@ -327,12 +313,14 @@ export default function TransactionsPage() {
           <AddExpenseModal
             expense={editExpense}
             onClose={() => { setShowAddExpense(false); setEditExpense(null); }}
+            prefilledDate={getDefaultEntryDate(year, month)}
           />
         )}
         {(showAddIncome || editIncome) && (
           <AddIncomeModal
             income={editIncome}
             onClose={() => { setShowAddIncome(false); setEditIncome(null); }}
+            prefilledDate={getDefaultEntryDate(year, month)}
           />
         )}
       </AnimatePresence>

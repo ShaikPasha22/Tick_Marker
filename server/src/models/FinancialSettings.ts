@@ -18,7 +18,7 @@ const FinancialSettingsSchema = new Schema<IFinancialSettings>(
     openingBalance: { type: Number, default: 0, min: 0 },
     currency: { type: String, default: 'INR' },
     currencySymbol: { type: String, default: '₹' },
-    lowBalanceThreshold: { type: Number, default: 10000, min: 0 },
+    lowBalanceThreshold: { type: Number, default: 0, min: 0 }, // 0 = no low-balance alert until the user sets one
     budgetAlertThresholds: { type: [Number], default: [75, 90, 100] },
     setupCompleted: { type: Boolean, default: false },
   },

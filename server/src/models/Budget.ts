@@ -10,6 +10,7 @@ export interface IBudget extends Document {
   year: number;
   month: number; // 1-12
   overall: number; // total monthly budget
+  carryForward: boolean;
   categoryBudgets: ICategoryBudget[];
   createdAt: Date;
   updatedAt: Date;
@@ -29,6 +30,7 @@ const BudgetSchema = new Schema<IBudget>(
     year: { type: Number, required: true },
     month: { type: Number, required: true, min: 1, max: 12 },
     overall: { type: Number, default: 0, min: 0 },
+    carryForward: { type: Boolean, default: false },
     categoryBudgets: { type: [CategoryBudgetSchema], default: [] },
   },
   { timestamps: true }

@@ -2,6 +2,18 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { User } from '../types';
 import { authApi } from '../api/auth';
+import { queryClient } from '../queryClient';
+import { useFinanceStore } from './financeStore';
+import { useTripStore } from './tripStore';
+
+// Drop everything cached for the previous account so a different (or brand new)
+// user never sees someone else's tasks, amounts or selections. Real data lives
+// in the database and is refetched for whoever signs in next.
+function clearUserScopedState() {
+  queryClient.clear();
+  useFinanceStore.getState().resetForNewSession();
+  useTripStore.getState().clearActiveTrip();
+}
 
 interface AuthState {
   user: User | null;
@@ -26,6 +38,7 @@ export const useAuthStore = create<AuthState>()(
       setHasHydrated: (state) => set({ _hasHydrated: state }),
 
       setAuth: (token, user) => {
+        if (get().user?._id !== user._id) clearUserScopedState();
         localStorage.setItem('tickmark_token', token);
         set({ token, user });
       },
@@ -37,6 +50,7 @@ export const useAuthStore = create<AuthState>()(
 
       logout: () => {
         localStorage.removeItem('tickmark_token');
+        clearUserScopedState();
         set({ user: null, token: null });
       },
 
@@ -53,6 +67,7 @@ export const useAuthStore = create<AuthState>()(
           }).catch(() => {
             // Token is invalid — clear session
             localStorage.removeItem('tickmark_token');
+            clearUserScopedState();
             set({ user: null, token: null });
           });
           return;
@@ -71,6 +86,7 @@ export const useAuthStore = create<AuthState>()(
           set({ user: freshUser, token: storedToken });
         } catch {
           localStorage.removeItem('tickmark_token');
+          clearUserScopedState();
           set({ user: null, token: null });
         } finally {
           set({ isLoading: false });

@@ -5,7 +5,7 @@ import { useForm } from 'react-hook-form';
 import { X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
-import { incomeApi, expenseCategoriesApi } from '../../api/finance';
+import { incomeApi, expenseCategoriesApi, invalidateFinanceQueries } from '../../api/finance';
 import type { Income, ExpenseCategory } from '../../types';
 
 interface FormData {
@@ -21,9 +21,10 @@ interface FormData {
 interface AddIncomeModalProps {
   onClose: () => void;
   income?: Income | null;
+  prefilledDate?: string;
 }
 
-export default function AddIncomeModal({ onClose, income }: AddIncomeModalProps) {
+export default function AddIncomeModal({ onClose, income, prefilledDate }: AddIncomeModalProps) {
   const queryClient = useQueryClient();
 
   const { data: categories = [] } = useQuery({
@@ -41,7 +42,7 @@ export default function AddIncomeModal({ onClose, income }: AddIncomeModalProps)
   } = useForm<FormData>({
     defaultValues: {
       amount: income ? String(income.amount) : '',
-      date: income ? income.date.slice(0, 10) : format(new Date(), 'yyyy-MM-dd'),
+      date: income ? income.date.slice(0, 10) : prefilledDate ?? format(new Date(), 'yyyy-MM-dd'),
       time: income?.time ?? format(new Date(), 'HH:mm'),
       categoryId: income
         ? (typeof income.categoryId === 'object' ? (income.categoryId as ExpenseCategory)._id : income.categoryId)
@@ -56,9 +57,7 @@ export default function AddIncomeModal({ onClose, income }: AddIncomeModalProps)
     mutationFn: (data: any) =>
       income ? incomeApi.update(income._id, data) : incomeApi.create(data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['finance'] });
-      queryClient.invalidateQueries({ queryKey: ['finance-dashboard'] });
-      queryClient.invalidateQueries({ queryKey: ['finance-summary'] });
+      invalidateFinanceQueries(queryClient);
     },
   });
 

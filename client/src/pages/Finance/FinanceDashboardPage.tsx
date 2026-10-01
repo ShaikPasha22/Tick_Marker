@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
-import { format, startOfMonth } from 'date-fns';
+import { format } from 'date-fns';
 import {
   Wallet, TrendingUp, TrendingDown, PiggyBank, BarChart2,
   Plus, Minus, AlertCircle, Zap
@@ -11,13 +11,14 @@ import {
 } from 'recharts';
 import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { financeDashboardApi, expensesApi, incomeApi } from '../../api/finance';
-import { useCurrency } from '../../store/financeStore';
+import { financeDashboardApi, expensesApi, incomeApi, invalidateFinanceQueries } from '../../api/finance';
+import { useCurrency, useFinanceStore, getMonthRange, getDefaultEntryDate } from '../../store/financeStore';
 import AddExpenseModal from '../../components/finance/AddExpenseModal';
 import AddIncomeModal from '../../components/finance/AddIncomeModal';
 import TransactionCard from '../../components/finance/TransactionCard';
 import BudgetProgressBar from '../../components/finance/BudgetProgressBar';
 import FinanceSubNav from '../../components/finance/FinanceSubNav';
+import MonthSelector from '../../components/finance/MonthSelector';
 import type { FinancialInsight, Expense, Income } from '../../types';
 
 function MetricCard({
@@ -93,23 +94,28 @@ export default function FinanceDashboardPage() {
   const [showAddIncome, setShowAddIncome] = useState(false);
   const [editExpense, setEditExpense] = useState<Expense | null>(null);
   const [editIncome, setEditIncome] = useState<Income | null>(null);
+  const year = useFinanceStore((s) => s.selectedYear);
+  const month = useFinanceStore((s) => s.selectedMonth);
   const { fmt, symbol } = useCurrency();
   const queryClient = useQueryClient();
 
-  const now = new Date();
-  const from = format(startOfMonth(now), 'yyyy-MM-dd');
-  const to = format(now, 'yyyy-MM-dd');
+  const selectedMonth = new Date(year, month - 1, 1);
+  const monthLabel = format(selectedMonth, 'MMMM yyyy');
+  const { from, to } = getMonthRange(year, month);
+  const newEntryDate = getDefaultEntryDate(year, month);
 
   const { data, isLoading } = useQuery({
     queryKey: ['finance-dashboard', from, to],
     queryFn: () => financeDashboardApi.get({ from, to }),
     staleTime: 60 * 1000,
+    // Keep the current month on screen while the next one loads
+    placeholderData: keepPreviousData,
   });
 
   const deleteExpenseMutation = useMutation({
     mutationFn: expensesApi.delete,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['finance-dashboard'] });
+      invalidateFinanceQueries(queryClient);
       toast.success('Expense deleted');
     },
   });
@@ -117,7 +123,7 @@ export default function FinanceDashboardPage() {
   const deleteIncomeMutation = useMutation({
     mutationFn: incomeApi.delete,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['finance-dashboard'] });
+      invalidateFinanceQueries(queryClient);
       toast.success('Income deleted');
     },
   });
@@ -136,7 +142,7 @@ export default function FinanceDashboardPage() {
 
   if (!data) return null;
 
-  const { summary, balance, budgetStatus, categoryBreakdown, dailySpending, recentTransactions, insights, velocity, averageDailySpending, topCategory } = data;
+  const { summary, periodBalance, budgetStatus, categoryBreakdown, dailySpending, recentTransactions, insights, velocity, averageDailySpending, topCategory } = data;
 
   // Spending velocity bar
   const velocityPct = velocity?.percentBudgetUsed ?? 0;
@@ -147,12 +153,13 @@ export default function FinanceDashboardPage() {
       <FinanceSubNav />
 
       {/* Page Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-xl font-bold text-surface-900 dark:text-surface-50">Finance</h2>
-          <p className="text-sm text-surface-400">{format(now, 'MMMM yyyy')} overview</p>
+          <p className="text-sm text-surface-400">{monthLabel} overview</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <MonthSelector />
           <motion.button
             whileTap={{ scale: 0.96 }}
             onClick={() => setShowAddIncome(true)}
@@ -182,12 +189,12 @@ export default function FinanceDashboardPage() {
       >
         <div className="absolute inset-0 bg-white/5 backdrop-blur-sm" />
         <div className="relative">
-          <p className="text-sm font-medium text-emerald-100 mb-1">Available Balance</p>
-          <p className="text-4xl font-bold mb-1">{fmt(balance.availableBalance)}</p>
+          <p className="text-sm font-medium text-emerald-100 mb-1">Balance at end of {format(selectedMonth, 'MMMM')}</p>
+          <p className="text-4xl font-bold mb-1">{fmt(periodBalance.endingBalance)}</p>
           <div className="flex items-center gap-4 text-sm text-emerald-100 flex-wrap">
-            <span>Opening: {fmt(balance.openingBalance)}</span>
-            <span>+{fmt(balance.totalConfirmedIncome)} income</span>
-            <span>−{fmt(balance.totalConfirmedExpenses)} spent</span>
+            <span>Start of month: {fmt(periodBalance.startingBalance)}</span>
+            <span>+{fmt(summary.totalIncome)} income</span>
+            <span>−{fmt(summary.totalExpenses)} spent</span>
           </div>
         </div>
 
@@ -200,11 +207,11 @@ export default function FinanceDashboardPage() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <MetricCard
           label="Total Income" value={fmt(summary.totalIncome)}
-          sub="This month" icon={TrendingUp} iconColor="#10b981" bgColor="#10b98120"
+          sub={monthLabel} icon={TrendingUp} iconColor="#10b981" bgColor="#10b98120"
         />
         <MetricCard
           label="Total Expenses" value={fmt(summary.totalExpenses)}
-          sub="This month" icon={TrendingDown} iconColor="#ef4444" bgColor="#ef444420"
+          sub={monthLabel} icon={TrendingDown} iconColor="#ef4444" bgColor="#ef444420"
         />
         <MetricCard
           label="Net Cash Flow" value={fmt(summary.netCashFlow)}
@@ -215,13 +222,14 @@ export default function FinanceDashboardPage() {
         />
         <MetricCard
           label="Avg Daily Spend" value={fmt(averageDailySpending)}
-          sub="This month" icon={BarChart2} iconColor="#6366f1" bgColor="#6366f120"
+          sub={monthLabel} icon={BarChart2} iconColor="#6366f1" bgColor="#6366f120"
         />
 
         {budgetStatus && (
           <>
             <MetricCard
               label="Monthly Budget" value={fmt(budgetStatus.overall.budgeted)}
+              sub={budgetStatus.overall.carriedForward > 0 ? `incl. ${fmt(budgetStatus.overall.carriedForward)} carried forward` : undefined}
               icon={PiggyBank} iconColor="#8b5cf6" bgColor="#8b5cf620"
             />
             <MetricCard
@@ -442,12 +450,14 @@ export default function FinanceDashboardPage() {
           <AddExpenseModal
             expense={editExpense}
             onClose={() => { setShowAddExpense(false); setEditExpense(null); }}
+            prefilledDate={newEntryDate}
           />
         )}
         {(showAddIncome || editIncome) && (
           <AddIncomeModal
             income={editIncome}
             onClose={() => { setShowAddIncome(false); setEditIncome(null); }}
+            prefilledDate={newEntryDate}
           />
         )}
       </AnimatePresence>

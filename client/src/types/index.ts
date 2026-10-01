@@ -310,6 +310,7 @@ export interface Budget {
   year: number;
   month: number;
   overall: number;
+  carryForward: boolean;
   categoryBudgets: { categoryId: string; amount: number }[];
 }
 
@@ -380,6 +381,7 @@ export interface BudgetStatusItem {
 export interface BudgetStatus {
   overall: {
     budgeted: number;
+    carriedForward: number;
     spent: number;
     remaining: number;
     percentage: number;
@@ -419,6 +421,7 @@ export interface FinancialDashboard {
   period: { from: string; to: string };
   summary: FinancialSummary;
   balance: AvailableBalance;
+  periodBalance: { startingBalance: number; endingBalance: number };
   budgetStatus: BudgetStatus | null;
   categoryBreakdown: CategoryBreakdownItem[];
   dailySpending: DailySpendingItem[];
