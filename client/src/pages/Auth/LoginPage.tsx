@@ -8,6 +8,13 @@ import { useAuthStore } from '../../store/authStore';
 import type { LoginForm } from '../../types';
 import { motion } from 'framer-motion';
 
+// Seeded demo account (server/src/seed.ts), pre-filled so local sign-in is one click.
+// Local dev only: Vite drops this from production builds, so the deployed login page
+// never shows or pre-fills it.
+const DEMO_CREDENTIALS: LoginForm | undefined = import.meta.env.DEV
+  ? { email: 'demo@tickmark.app', password: 'Demo1234!' }
+  : undefined;
+
 export default function LoginPage() {
   const navigate = useNavigate();
   const { setAuth } = useAuthStore();
@@ -17,7 +24,7 @@ export default function LoginPage() {
     register,
     handleSubmit,
     formState: { errors, isSubmitting },
-  } = useForm<LoginForm>();
+  } = useForm<LoginForm>({ defaultValues: DEMO_CREDENTIALS });
 
   const onSubmit = async (data: LoginForm) => {
     try {
@@ -93,10 +100,12 @@ export default function LoginPage() {
             <p className="text-surface-500 mt-1">Sign in to continue tracking</p>
           </div>
 
-          {/* Demo hint */}
-          <div className="bg-primary-50 dark:bg-primary-900/20 rounded-xl p-3 text-sm text-primary-700 dark:text-primary-300">
-            <strong>Demo account:</strong> demo@tickmark.app / Demo1234!
-          </div>
+          {/* Demo hint (local dev only) */}
+          {DEMO_CREDENTIALS && (
+            <div className="bg-primary-50 dark:bg-primary-900/20 rounded-xl p-3 text-sm text-primary-700 dark:text-primary-300">
+              <strong>Demo account (local only):</strong> {DEMO_CREDENTIALS.email} / {DEMO_CREDENTIALS.password}
+            </div>
+          )}
 
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" id="login-form">
             <div>
