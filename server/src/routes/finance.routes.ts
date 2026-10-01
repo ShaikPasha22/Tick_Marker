@@ -21,6 +21,9 @@ import {
   // Export
   exportFinanceData,
 } from '../controllers/finance.controller';
+import {
+  getRecurring, createRecurring, updateRecurring, deleteRecurring, payRecurring, skipRecurring,
+} from '../controllers/recurring.controller';
 
 const router = Router();
 router.use(authenticate);
@@ -74,6 +77,14 @@ router.get('/payment-methods', getPaymentMethodsList);
 router.post('/payment-methods', createPaymentMethod);
 router.patch('/payment-methods/:id', updatePaymentMethod);
 router.delete('/payment-methods/:id', deletePaymentMethod);
+
+// ─── Recurring bills & income ────────────────────────────────────────────────
+router.get('/recurring', getRecurring);
+router.post('/recurring', createRecurring);
+router.patch('/recurring/:id', updateRecurring);
+router.delete('/recurring/:id', deleteRecurring);
+router.post('/recurring/:id/pay', payRecurring);
+router.post('/recurring/:id/skip', skipRecurring);
 
 // ─── Export ──────────────────────────────────────────────────────────────────
 router.get('/export', exportFinanceData);

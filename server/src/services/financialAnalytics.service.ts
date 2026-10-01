@@ -69,6 +69,33 @@ export interface BudgetStatusItem {
   isOverBudget: boolean;
 }
 
+/** A budget (overall or one category) that has reached one of the user's alert thresholds */
+export interface BudgetAlert {
+  scope: 'overall' | 'category';
+  categoryId?: string;
+  name: string;
+  icon?: string;
+  threshold: number; // highest threshold reached, e.g. 90
+  percentage: number;
+  spent: number;
+  budgeted: number;
+}
+
+/** Average daily spending over every day before a period, since the user's first transaction */
+export interface PriorDailyAverage {
+  amount: number;
+  days: number;
+  from: Date;
+  to: Date;
+}
+
+/** How much can still be spent per day for the rest of the current month */
+export interface SafeToSpend {
+  perDay: number;
+  remaining: number;
+  daysLeft: number;
+}
+
 export interface BudgetStatus {
   overall: {
     budgeted: number;
@@ -116,6 +143,12 @@ export interface FinancialDashboard {
   /** Balance just before the period starts and at its last day */
   periodBalance: { startingBalance: number; endingBalance: number };
   budgetStatus: BudgetStatus | null;
+  /** Month view only: budgets past an alert threshold, most-used first */
+  budgetAlerts: BudgetAlert[];
+  /** Current month with a budget only */
+  safeToSpend: SafeToSpend | null;
+  /** Usual spending per day before this period (first transaction day up to the day before it) */
+  priorDailyAverage: PriorDailyAverage | null;
   categoryBreakdown: CategoryBreakdownItem[];
   dailySpending: DailySpendingItem[];
   recentTransactions: any[];
@@ -749,6 +782,87 @@ export async function generateFinancialInsights(
 
 // ─── Full Dashboard ───────────────────────────────────────────────────────────
 
+export const DEFAULT_BUDGET_ALERT_THRESHOLDS = [75, 90, 100];
+
+/** Highest threshold reached by the overall budget and by each category budget. */
+export function getBudgetAlerts(status: BudgetStatus, thresholds: number[]): BudgetAlert[] {
+  const sorted = [...thresholds].filter((t) => t > 0).sort((a, b) => b - a);
+  const reached = (pct: number) => sorted.find((t) => pct >= t);
+  const alerts: BudgetAlert[] = [];
+
+  const overallThreshold = status.overall.budgeted > 0 ? reached(status.overall.percentage) : undefined;
+  if (overallThreshold !== undefined) {
+    alerts.push({
+      scope: 'overall', name: 'Overall budget', threshold: overallThreshold,
+      percentage: status.overall.percentage, spent: status.overall.spent, budgeted: status.overall.budgeted,
+    });
+  }
+  for (const c of status.categories) {
+    const t = c.budgeted > 0 ? reached(c.percentage) : undefined;
+    if (t !== undefined) {
+      alerts.push({
+        scope: 'category', categoryId: c.categoryId, name: c.name, icon: c.icon, threshold: t,
+        percentage: c.percentage, spent: c.spent, budgeted: c.budgeted,
+      });
+    }
+  }
+  return alerts.sort((a, b) => b.percentage - a.percentage);
+}
+
+/**
+ * Thresholds that a just-added expense pushed its month's budgets past (overall, and the
+ * expense's own category). Used to warn the user right after they save the expense.
+ */
+export async function getNewlyCrossedBudgetAlerts(
+  userId: Types.ObjectId,
+  expense: { date: Date; amount: number; categoryId?: Types.ObjectId | string }
+): Promise<BudgetAlert[]> {
+  const year = expense.date.getUTCFullYear();
+  const month = expense.date.getUTCMonth() + 1;
+  const [status, settings] = await Promise.all([
+    getBudgetStatus(userId, year, month),
+    FinancialSettings.findOne({ userId }),
+  ]);
+  if (!status) return [];
+
+  const thresholds = settings?.budgetAlertThresholds?.length
+    ? settings.budgetAlertThresholds
+    : DEFAULT_BUDGET_ALERT_THRESHOLDS;
+  const categoryId = expense.categoryId?.toString();
+  const pctBefore = (spent: number, budgeted: number) =>
+    budgeted > 0 ? Math.round(((spent - expense.amount) / budgeted) * 100) : 0;
+
+  return getBudgetAlerts(status, thresholds).filter((a) => {
+    if (a.scope === 'category' && a.categoryId !== categoryId) return false;
+    return pctBefore(a.spent, a.budgeted) < a.threshold;
+  });
+}
+
+/** Remaining budget spread over the days left in the current month (null for other months). */
+function getSafeToSpend(budgetStatus: BudgetStatus | null, year: number, month: number): SafeToSpend | null {
+  if (!budgetStatus || budgetStatus.overall.budgeted <= 0) return null;
+  const now = new Date();
+  if (now.getUTCFullYear() !== year || now.getUTCMonth() + 1 !== month) return null;
+  const daysInMonth = utcMonthRange(year, month).to.getUTCDate();
+  const daysLeft = daysInMonth - now.getUTCDate() + 1; // including today
+  const remaining = budgetStatus.overall.remaining;
+  return { perDay: Math.floor(remaining / daysLeft), remaining, daysLeft };
+}
+
+/**
+ * Spending per day across all days before `periodStart`, counted from the user's first
+ * transaction (so the empty start of their first month doesn't dilute it). Null when
+ * nothing was recorded before the period.
+ */
+export async function getPriorDailyAverage(userId: Types.ObjectId, periodStart: Date): Promise<PriorDailyAverage | null> {
+  const to = new Date(toUTCDayStart(periodStart).getTime() - 1);
+  const { from } = await getAllTimeRange(userId);
+  if (from > to) return null;
+  const days = Math.round((toUTCDayStart(to).getTime() - from.getTime()) / 86400000) + 1;
+  const total = await sumExpenses(userId, from, to);
+  return { amount: Math.round(total / days), days, from, to: toUTCDayStart(to) };
+}
+
 /**
  * Range covering all of a user's transactions: first transaction day up to the later
  * of today and the last transaction day. Falls back to today when there are none.
@@ -782,7 +896,7 @@ export async function getFinancialDashboard(
     toUTCDayStart(from).getTime() === monthRange.from.getTime() &&
     toUTCDayEnd(to).getTime() === monthRange.to.getTime();
 
-  const [summary, balance, startingBalance, endingBalance, categoryBreakdown, dailySpending, budgetStatus, insights, velocity, settings] =
+  const [summary, balance, startingBalance, endingBalance, categoryBreakdown, dailySpending, budgetStatus, insights, velocity, settings, priorDailyAverage] =
     await Promise.all([
       getFinancialSummary(userId, from, to),
       getAvailableBalance(userId),
@@ -794,6 +908,7 @@ export async function getFinancialDashboard(
       isFullMonth ? generateFinancialInsights(userId, from, to) : Promise.resolve([]),
       isFullMonth ? getSpendingVelocity(userId, year, month) : Promise.resolve(null),
       FinancialSettings.findOne({ userId }),
+      getPriorDailyAverage(userId, from),
     ]);
 
   // Recent transactions (expenses + income combined)
@@ -832,10 +947,20 @@ export async function getFinancialDashboard(
   const averageDailySpending = Math.round(summary.totalExpenses / days);
   const topCategory = categoryBreakdown.length > 0 ? categoryBreakdown[0] : null;
 
+  const budgetAlerts = budgetStatus
+    ? getBudgetAlerts(
+      budgetStatus,
+      settings?.budgetAlertThresholds?.length ? settings.budgetAlertThresholds : DEFAULT_BUDGET_ALERT_THRESHOLDS
+    )
+    : [];
+
   return {
     period: { from, to, isFullMonth },
     summary,
     balance,
+    budgetAlerts,
+    safeToSpend: getSafeToSpend(budgetStatus, year, month),
+    priorDailyAverage,
     periodBalance: {
       startingBalance: startingBalance.availableBalance,
       endingBalance: endingBalance.availableBalance,

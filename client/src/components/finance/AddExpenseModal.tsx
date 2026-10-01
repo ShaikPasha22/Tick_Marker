@@ -2,12 +2,13 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useQueryClient, useMutation, useQuery } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
-import { X, AlertTriangle, Plus, Check } from 'lucide-react';
+import { X, Plus, Check } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 import { expensesApi, expenseCategoriesApi, paymentMethodsApi, invalidateFinanceQueries } from '../../api/finance';
-import type { ExpenseCategory, PaymentMethod, Expense } from '../../types';
+import type { ExpenseCategory, PaymentMethod, Expense, BudgetAlert } from '../../types';
 import { useCurrency } from '../../store/financeStore';
+import { notifyBudgetAlerts } from './budgetAlertToast';
 
 interface FormData {
   amount: string;
@@ -27,9 +28,8 @@ interface AddExpenseModalProps {
 }
 
 export default function AddExpenseModal({ onClose, expense, prefilledDate }: AddExpenseModalProps) {
-  useCurrency();
+  const { fmt } = useCurrency();
   const queryClient = useQueryClient();
-  const [unusualWarning, setUnusualWarning] = useState<string | null>(null);
 
   const [showAddCategory, setShowAddCategory] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
@@ -118,7 +118,7 @@ export default function AddExpenseModal({ onClose, expense, prefilledDate }: Add
   }, [categories, expense, setValue, getValues]);
 
   const { mutateAsync } = useMutation({
-    mutationFn: (data: any): Promise<{ expense: Expense; unusualWarning: any }> =>
+    mutationFn: (data: any): Promise<{ expense: Expense; unusualWarning: any; budgetAlerts?: BudgetAlert[] }> =>
       expense
         ? expensesApi.update(expense._id, data).then((exp) => ({ expense: exp, unusualWarning: null }))
         : expensesApi.create(data),
@@ -141,11 +141,12 @@ export default function AddExpenseModal({ onClose, expense, prefilledDate }: Add
 
       const result = await mutateAsync(payload) as any;
 
-      if (result?.unusualWarning?.isUnusual) {
-        setUnusualWarning(result.unusualWarning.message);
-      }
-
       toast.success(expense ? 'Expense updated!' : 'Expense added!');
+      // The modal closes right away, so warnings are shown as toasts
+      if (result?.unusualWarning?.isUnusual) {
+        toast(result.unusualWarning.message, { icon: '⚠️', duration: 6000 });
+      }
+      notifyBudgetAlerts(result?.budgetAlerts, fmt);
       onClose();
     } catch (error: any) {
       toast.error(error?.response?.data?.message ?? 'Failed to save expense');
@@ -479,14 +480,6 @@ export default function AddExpenseModal({ onClose, expense, prefilledDate }: Add
                 ))}
               </div>
             </div>
-
-            {/* Unusual warning */}
-            {unusualWarning && (
-              <div className="flex items-start gap-2 p-3 rounded-xl bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800">
-                <AlertTriangle size={14} className="text-amber-500 shrink-0 mt-0.5" />
-                <p className="text-xs text-amber-700 dark:text-amber-400">{unusualWarning}</p>
-              </div>
-            )}
 
             {/* Actions */}
             <div className="flex gap-3 pt-1">

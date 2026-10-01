@@ -1,10 +1,11 @@
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Calendar, List, BarChart2, PiggyBank, Tag, Settings, Map } from 'lucide-react';
+import { LayoutDashboard, Calendar, List, Repeat, BarChart2, PiggyBank, Tag, Settings, Map } from 'lucide-react';
 
 const tabs = [
   { to: '/finance', icon: LayoutDashboard, label: 'Overview', end: true },
   { to: '/finance/calendar', icon: Calendar, label: 'Calendar', end: false },
   { to: '/finance/transactions', icon: List, label: 'Transactions', end: false },
+  { to: '/finance/recurring', icon: Repeat, label: 'Recurring', end: false },
   { to: '/finance/analytics', icon: BarChart2, label: 'Analytics', end: false },
   { to: '/finance/budget', icon: PiggyBank, label: 'Budget', end: false },
   { to: '/finance/categories', icon: Tag, label: 'Categories', end: false },

@@ -2,7 +2,7 @@ import { Types } from 'mongoose';
 import { Expense } from '../models/Expense';
 import { ExpenseCategory } from '../models/ExpenseCategory';
 import { PaymentMethod } from '../models/PaymentMethod';
-import { detectUnusualSpending } from './financialAnalytics.service';
+import { detectUnusualSpending, getNewlyCrossedBudgetAlerts } from './financialAnalytics.service';
 import { createError } from '../middleware/errorHandler';
 
 export class ExpenseService {
@@ -21,6 +21,7 @@ export class ExpenseService {
       paymentMethodId?: string | Types.ObjectId;
       tagIds?: (string | Types.ObjectId)[];
       status?: 'confirmed' | 'pending' | 'cancelled';
+      recurringId?: string | Types.ObjectId;
     }
   ) {
     if (data.categoryId) {
@@ -45,12 +46,17 @@ export class ExpenseService {
       unusualWarning = await detectUnusualSpending(userId, new Types.ObjectId(data.categoryId), expense.amount);
     }
 
+    // Budgets this expense pushed past an alert threshold (only confirmed spending counts)
+    const budgetAlerts = expense.status === 'confirmed' && !expense.isRefund
+      ? await getNewlyCrossedBudgetAlerts(userId, expense)
+      : [];
+
     const populated = await Expense.findById(expense._id)
       .populate('categoryId', 'name icon color')
       .populate('tagIds', 'name color')
       .populate('paymentMethodId', 'name icon')
       .lean();
 
-    return { expense: populated, unusualWarning };
+    return { expense: populated, unusualWarning, budgetAlerts };
   }
 }

@@ -417,6 +417,42 @@ export interface FinancialInsight {
   icon: string;
 }
 
+/** A budget (overall or one category) that has reached one of the user's alert thresholds */
+export interface BudgetAlert {
+  scope: 'overall' | 'category';
+  categoryId?: string;
+  name: string;
+  icon?: string;
+  threshold: number;
+  percentage: number;
+  spent: number;
+  budgeted: number;
+}
+
+/** Remaining budget spread over the days left in the current month */
+export interface SafeToSpend {
+  perDay: number;
+  remaining: number;
+  daysLeft: number;
+}
+
+export type RecurringFrequency = 'daily' | 'weekly' | 'monthly' | 'yearly';
+
+/** A repeating bill/subscription (expense) or repeating income such as salary */
+export interface RecurringTransaction {
+  _id: string;
+  type: 'expense' | 'income';
+  amount: number;
+  categoryId: ExpenseCategory | string;
+  paymentMethodId?: PaymentMethod | string;
+  description: string;
+  notes?: string;
+  frequency: RecurringFrequency;
+  startDate: string;
+  nextDueDate: string;
+  isActive: boolean;
+}
+
 export interface FinancialDashboard {
   /** isFullMonth: exactly one calendar month — budget, pace and insights are only filled in then */
   period: { from: string; to: string; isFullMonth: boolean };
@@ -424,6 +460,12 @@ export interface FinancialDashboard {
   balance: AvailableBalance;
   periodBalance: { startingBalance: number; endingBalance: number };
   budgetStatus: BudgetStatus | null;
+  /** Month view only: budgets past an alert threshold, most-used first */
+  budgetAlerts: BudgetAlert[];
+  /** Current month with a budget only */
+  safeToSpend: SafeToSpend | null;
+  /** Usual spending per day before this period, since the first transaction; null if none */
+  priorDailyAverage: { amount: number; days: number; from: string; to: string } | null;
   categoryBreakdown: CategoryBreakdownItem[];
   dailySpending: DailySpendingItem[];
   recentTransactions: (Expense | Income)[];

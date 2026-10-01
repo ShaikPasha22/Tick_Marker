@@ -4,7 +4,7 @@ import type {
   FinancialDashboard, FinancialSettings, Expense, Income, Budget,
   ExpenseCategory, ExpenseTag, PaymentMethod, CategoryBreakdownItem,
   DailySpendingItem, MonthlyDataItem, BudgetStatus, PaymentMethodBreakdown,
-  SpendingVelocity, FinancialInsight, CalendarDay,
+  SpendingVelocity, FinancialInsight, CalendarDay, RecurringTransaction, BudgetAlert,
 } from '../types';
 
 const fmt = (params: Record<string, string | number | undefined>) =>
@@ -101,7 +101,9 @@ export const expensesApi = {
       .then((r) => r.data),
 
   create: (data: Partial<Expense> & { categoryId: string }) =>
-    api.post<{ expense: Expense; unusualWarning: any }>('/finance/expenses', data).then((r) => r.data),
+    api
+      .post<{ expense: Expense; unusualWarning: any; budgetAlerts?: BudgetAlert[] }>('/finance/expenses', data)
+      .then((r) => r.data),
 
   get: (id: string) =>
     api.get<{ expense: Expense }>(`/finance/expenses/${id}`).then((r) => r.data.expense),
@@ -170,6 +172,38 @@ export const expenseTagsApi = {
   create: (data: { name: string; color?: string }) =>
     api.post<{ tag: ExpenseTag }>('/finance/tags', data).then((r) => r.data.tag),
   delete: (id: string) => api.delete(`/finance/tags/${id}`).then((r) => r.data),
+};
+
+// ─── Recurring bills & income ─────────────────────────────────────────────────
+
+export type RecurringInput = {
+  type: 'expense' | 'income';
+  amount: number;
+  description: string;
+  categoryId: string;
+  paymentMethodId?: string;
+  frequency: RecurringTransaction['frequency'];
+  startDate: string;
+  nextDueDate?: string;
+  isActive?: boolean;
+};
+
+export const recurringApi = {
+  getAll: () =>
+    api.get<{ recurring: RecurringTransaction[] }>('/finance/recurring').then((r) => r.data.recurring),
+  create: (data: RecurringInput) =>
+    api.post<{ recurring: RecurringTransaction }>('/finance/recurring', data).then((r) => r.data.recurring),
+  update: (id: string, data: Partial<RecurringInput>) =>
+    api.patch<{ recurring: RecurringTransaction }>(`/finance/recurring/${id}`, data).then((r) => r.data.recurring),
+  delete: (id: string) => api.delete(`/finance/recurring/${id}`),
+  /** Record this occurrence as a transaction and move to the next due date */
+  pay: (id: string) =>
+    api
+      .post<{ recurring: RecurringTransaction; budgetAlerts?: BudgetAlert[] }>(`/finance/recurring/${id}/pay`, {})
+      .then((r) => r.data),
+  /** Move to the next due date without recording anything */
+  skip: (id: string) =>
+    api.post<{ recurring: RecurringTransaction }>(`/finance/recurring/${id}/skip`).then((r) => r.data.recurring),
 };
 
 // ─── Payment Methods ──────────────────────────────────────────────────────────

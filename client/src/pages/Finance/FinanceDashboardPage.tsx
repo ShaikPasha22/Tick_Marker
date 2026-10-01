@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { format, parseISO } from 'date-fns';
 import {
   Wallet, TrendingUp, TrendingDown, PiggyBank, BarChart2,
-  Plus, Minus, AlertCircle, Zap
+  Plus, Minus, AlertCircle, AlertTriangle, Zap, ShieldCheck
 } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer
@@ -22,6 +22,8 @@ import TransactionCard from '../../components/finance/TransactionCard';
 import BudgetProgressBar from '../../components/finance/BudgetProgressBar';
 import FinanceSubNav from '../../components/finance/FinanceSubNav';
 import OverviewPeriodPicker from '../../components/finance/OverviewPeriodPicker';
+import UpcomingBills from '../../components/finance/UpcomingBills';
+import { describeBudgetAlert } from '../../components/finance/budgetAlertToast';
 import type { FinancialInsight, Expense, Income, DailySpendingItem } from '../../types';
 
 const dayLabel = (d: string) => format(parseISO(d), 'd MMM yyyy');
@@ -250,7 +252,7 @@ export default function FinanceDashboardPage() {
     );
   }
 
-  const { summary, periodBalance, budgetStatus, categoryBreakdown, dailySpending, recentTransactions, insights, velocity, averageDailySpending, topCategory } = data;
+  const { summary, periodBalance, budgetStatus, budgetAlerts, safeToSpend, categoryBreakdown, dailySpending, recentTransactions, insights, velocity, averageDailySpending, topCategory } = data;
 
   // Spending velocity bar
   const velocityPct = velocity?.percentBudgetUsed ?? 0;
@@ -263,6 +265,29 @@ export default function FinanceDashboardPage() {
       {header}
 
       <div className={`space-y-5 transition-opacity ${isPlaceholderData ? 'opacity-60' : ''}`}>
+      {/* Budget alerts: budgets past the user's alert thresholds (month view only) */}
+      {budgetAlerts.length > 0 && (
+        <div className="space-y-2" role="status">
+          {budgetAlerts.map((alert) => {
+            const exceeded = alert.percentage >= 100;
+            return (
+              <div
+                key={alert.scope + (alert.categoryId ?? '')}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border text-sm
+                  ${exceeded
+                    ? 'bg-red-50 dark:bg-red-900/10 border-red-200 dark:border-red-800 text-red-700 dark:text-red-400'
+                    : 'bg-amber-50 dark:bg-amber-900/10 border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-400'
+                  }`}
+              >
+                <AlertTriangle size={15} className="shrink-0" />
+                <span className="flex-1">{alert.icon ? `${alert.icon} ` : ''}{describeBudgetAlert(alert, fmt)}</span>
+                <Link to="/finance/budget" className="text-xs font-semibold underline-offset-2 hover:underline shrink-0">Budget →</Link>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       {/* Available Balance Hero */}
       <motion.div
         initial={{ opacity: 0, scale: 0.98 }}
@@ -328,6 +353,15 @@ export default function FinanceDashboardPage() {
               bgColor={budgetStatus.overall.remaining > 0 ? '#10b98120' : '#ef444420'}
               highlight={budgetStatus.overall.remaining > 0}
             />
+            {safeToSpend && (
+              <MetricCard
+                label="Safe to Spend" value={`${fmt(Math.max(0, safeToSpend.perDay))}/day`}
+                sub={safeToSpend.perDay > 0 ? `for the ${safeToSpend.daysLeft} days left` : 'Budget used up for this month'}
+                icon={ShieldCheck}
+                iconColor={safeToSpend.perDay > 0 ? '#10b981' : '#ef4444'}
+                bgColor={safeToSpend.perDay > 0 ? '#10b98120' : '#ef444420'}
+              />
+            )}
           </>
         )}
 
@@ -342,6 +376,8 @@ export default function FinanceDashboardPage() {
           />
         )}
       </div>
+
+      <UpcomingBills />
 
       {/* Spending Velocity */}
       {velocity && (

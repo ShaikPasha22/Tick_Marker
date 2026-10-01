@@ -30,6 +30,7 @@ const FinanceAnalyticsPage = lazy(() => import('./pages/Finance/FinanceAnalytics
 const BudgetPage = lazy(() => import('./pages/Finance/BudgetPage'));
 const CategoriesPage = lazy(() => import('./pages/Finance/CategoriesPage'));
 const FinanceSettingsPage = lazy(() => import('./pages/Finance/FinanceSettingsPage'));
+const RecurringPage = lazy(() => import('./pages/Finance/RecurringPage'));
 
 // Trip Finance pages
 const TripListPage = lazy(() => import('./pages/Finance/Trips/TripListPage'));
@@ -121,6 +122,7 @@ function App() {
           <Route path="/finance" element={<FinanceDashboardPage />} />
           <Route path="/finance/calendar" element={<CalendarPage />} />
           <Route path="/finance/transactions" element={<TransactionsPage />} />
+          <Route path="/finance/recurring" element={<RecurringPage />} />
           <Route path="/finance/analytics" element={<FinanceAnalyticsPage />} />
           <Route path="/finance/budget" element={<BudgetPage />} />
           <Route path="/finance/categories" element={<CategoriesPage />} />

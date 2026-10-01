@@ -31,7 +31,7 @@ export default function MonthSelector({ id = 'finance-month' }: { id?: string })
       <select
         value={selectedMonth}
         onChange={(e) => setSelectedMonth(selectedYear, Number(e.target.value))}
-        className="input py-1.5 text-xs w-28"
+        className="input py-1.5 text-xs w-32"
         aria-label="Month"
         id={`${id}-select`}
       >
@@ -42,7 +42,7 @@ export default function MonthSelector({ id = 'finance-month' }: { id?: string })
       <select
         value={selectedYear}
         onChange={(e) => setSelectedMonth(Number(e.target.value), selectedMonth)}
-        className="input py-1.5 text-xs w-20"
+        className="input py-1.5 text-xs w-24"
         aria-label="Year"
         id={`${id}-year-select`}
       >

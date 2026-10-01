@@ -9,6 +9,7 @@ import { expensesApi, incomeApi, expenseCategoriesApi, financeExportApi, invalid
 import { useCurrency, useFinanceStore, getMonthRange, getDefaultEntryDate } from '../../store/financeStore';
 import FinanceSubNav from '../../components/finance/FinanceSubNav';
 import MonthSelector from '../../components/finance/MonthSelector';
+import SpendingCharts from '../../components/finance/SpendingCharts';
 import TransactionCard from '../../components/finance/TransactionCard';
 import AddExpenseModal from '../../components/finance/AddExpenseModal';
 import AddIncomeModal from '../../components/finance/AddIncomeModal';
@@ -143,6 +144,8 @@ export default function TransactionsPage() {
           </motion.button>
         </div>
       </div>
+
+      <SpendingCharts year={year} month={month} />
 
       {/* Mode tabs */}
       <div className="flex gap-1 bg-surface-100 dark:bg-surface-800 rounded-xl p-1 w-fit">
