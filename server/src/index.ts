@@ -42,13 +42,14 @@ const limiter = rateLimit({
 });
 app.use('/api/', limiter);
 
-// Auth endpoints — stricter limit
+// Credential endpoints — stricter limit against password guessing. Session checks
+// (GET /api/auth/me on every page load) only fall under the general limit above.
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 20,
   message: 'Too many authentication attempts, please try again later.',
 });
-app.use('/api/auth/', authLimiter);
+app.use(['/api/auth/login', '/api/auth/register', '/api/auth/forgot-password', '/api/auth/reset-password'], authLimiter);
 
 // Logging
 if (env.NODE_ENV === 'development') {

@@ -64,8 +64,9 @@ export const useAuthStore = create<AuthState>()(
           // Silent background refresh — update user data without blocking
           authApi.getMe().then((freshUser) => {
             set({ user: freshUser });
-          }).catch(() => {
-            // Token is invalid — clear session
+          }).catch((err) => {
+            // Only an invalid/expired token ends the session — not a network blip or rate limit
+            if (err?.response?.status !== 401) return;
             localStorage.removeItem('tickmark_token');
             clearUserScopedState();
             set({ user: null, token: null });
@@ -84,10 +85,13 @@ export const useAuthStore = create<AuthState>()(
           set({ isLoading: true });
           const freshUser = await authApi.getMe();
           set({ user: freshUser, token: storedToken });
-        } catch {
-          localStorage.removeItem('tickmark_token');
-          clearUserScopedState();
-          set({ user: null, token: null });
+        } catch (err: any) {
+          // Keep the token on temporary failures so the next load can retry
+          if (err?.response?.status === 401) {
+            localStorage.removeItem('tickmark_token');
+            clearUserScopedState();
+            set({ user: null, token: null });
+          }
         } finally {
           set({ isLoading: false });
         }
